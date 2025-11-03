@@ -326,14 +326,15 @@ export default function WhatsAppPage() {
       if (Array.isArray(response.data)) {
         // Se já é array, usar diretamente
         conversationsData = response.data;
-      } else if (typeof response.data === 'object') {
+      } else if (typeof response.data === 'object' && response.data !== null) {
         // Se for objeto, tentar extrair array de propriedades comuns
-        if (Array.isArray(response.data.conversations)) {
-          conversationsData = response.data.conversations;
-        } else if (Array.isArray(response.data.data)) {
-          conversationsData = response.data.data;
-        } else if (Array.isArray(response.data.items)) {
-          conversationsData = response.data.items;
+        const dataObj = response.data as any;
+        if (Array.isArray(dataObj.conversations)) {
+          conversationsData = dataObj.conversations;
+        } else if (Array.isArray(dataObj.data)) {
+          conversationsData = dataObj.data;
+        } else if (Array.isArray(dataObj.items)) {
+          conversationsData = dataObj.items;
         } else {
           // Se não encontrar array, usar array vazio
           console.warn("Response.data não é array, é objeto sem propriedades array:", response.data);
