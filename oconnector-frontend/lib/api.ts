@@ -149,11 +149,35 @@ class ApiClient {
 
   // ==================== WHATSAPP ====================
   async getWhatsAppConversations() {
-    return this.request<any[]>('/api/whatsapp/conversations');
+    try {
+      const response = await this.request<any[]>('/api/whatsapp/conversations');
+      // Garantir que sempre retorna um array
+      if (response.success && response.data) {
+        return {
+          ...response,
+          data: Array.isArray(response.data) ? response.data : [],
+        };
+      }
+      return { ...response, data: [] };
+    } catch (error) {
+      return { success: false, data: [], error: 'Erro ao buscar conversas' };
+    }
   }
 
   async getWhatsAppMessages(contact: string) {
-    return this.request<any[]>(`/api/whatsapp/messages?contact=${contact}`);
+    try {
+      const response = await this.request<any[]>(`/api/whatsapp/messages?contact=${contact}`);
+      // Garantir que sempre retorna um array
+      if (response.success && response.data) {
+        return {
+          ...response,
+          data: Array.isArray(response.data) ? response.data : [],
+        };
+      }
+      return { ...response, data: [] };
+    } catch (error) {
+      return { success: false, data: [], error: 'Erro ao buscar mensagens' };
+    }
   }
 
   async sendWhatsAppMessage(contact: string, message: string) {

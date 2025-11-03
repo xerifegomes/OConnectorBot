@@ -272,7 +272,9 @@ export default function WhatsAppPage() {
     try {
       const response = await api.getWhatsAppConversations();
       if (response.success && response.data) {
-        setConversations(response.data.map((conv: any) => ({
+        // Garantir que data é um array
+        const conversationsData = Array.isArray(response.data) ? response.data : [];
+        setConversations(conversationsData.map((conv: any) => ({
           id: conv.id || conv.contact,
           contact: conv.contact,
           contactName: conv.contactName,
@@ -291,7 +293,9 @@ export default function WhatsAppPage() {
       setLoading(true);
       const response = await api.getWhatsAppMessages(conversationId);
       if (response.success && response.data) {
-        setMessages(response.data.map((msg: any) => ({
+        // Garantir que data é um array
+        const messagesData = Array.isArray(response.data) ? response.data : [];
+        setMessages(messagesData.map((msg: any) => ({
           id: msg.id,
           text: msg.text,
           fromMe: msg.fromMe,
