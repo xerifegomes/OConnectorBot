@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "@/lib/api";
+import { Loader2, Wifi, WifiOff, Bot, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface Message {
   id: string;
@@ -36,13 +37,20 @@ export default function WhatsAppPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [botInfo, setBotInfo] = useState<{ whatsappNumber?: string; name?: string } | null>(null);
+  const [agentStatus, setAgentStatus] = useState<{ ready: boolean; trained: boolean } | null>(null);
+  const [botServerConnected, setBotServerConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const qrPollInterval = useRef<NodeJS.Timeout | null>(null);
+  
+  // URL do bot server local (pode ser configurado via env)
+  const BOT_SERVER_URL = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
 
   useEffect(() => {
     loadConversations();
     checkBotStatus();
+    checkBotServerConnection();
+    checkAgentStatus();
     startQRPolling();
     
     return () => {
@@ -70,7 +78,62 @@ export default function WhatsAppPage() {
     // Polling para verificar QR Code e status
     qrPollInterval.current = setInterval(async () => {
       await checkBotStatus();
+      await checkBotServerConnection();
+      if (status === "waiting_qr" && !qrCode) {
+        await loadQRCode();
+      }
     }, 3000); // A cada 3 segundos
+  };
+
+  const checkBotServerConnection = async () => {
+    try {
+      // Tentar conectar direto ao bot server local
+      const response = await fetch(`${BOT_SERVER_URL}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setBotServerConnected(true);
+        
+        // Atualizar status do bot
+        if (data.status) {
+          setStatus(data.status as typeof status);
+        }
+        if (data.qr && data.status === 'waiting_qr') {
+          setQrCode(data.qr);
+          if (!showQRDialog) {
+            setShowQRDialog(true);
+          }
+        }
+        if (data.info) {
+          setBotInfo(data.info);
+        }
+      } else {
+        setBotServerConnected(false);
+      }
+    } catch (error) {
+      setBotServerConnected(false);
+      // Se falhar, tentar via API do Cloudflare
+      await checkBotStatus();
+    }
+  };
+
+  const checkAgentStatus = async () => {
+    try {
+      // Verificar status do agent IA via API
+      const response = await api.getWhatsAppBotStatus();
+      if (response.success && response.data) {
+        const data = response.data as any;
+        setAgentStatus({
+          ready: data.ready || false,
+          trained: data.info?.trained || false,
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao verificar status do agent:", error);
+    }
   };
 
   const checkBotStatus = async () => {
@@ -98,6 +161,22 @@ export default function WhatsAppPage() {
 
   const loadQRCode = async () => {
     try {
+      // Tentar primeiro do bot server local
+      try {
+        const botResponse = await fetch(`${BOT_SERVER_URL}/qr`);
+        if (botResponse.ok) {
+          const botData = await botResponse.json();
+          if (botData.qr) {
+            setQrCode(botData.qr);
+            setShowQRDialog(true);
+            return;
+          }
+        }
+      } catch (e) {
+        // Se falhar, tentar via API
+      }
+      
+      // Fallback: via API do Cloudflare
       const response = await api.getWhatsAppQR();
       if (response.success && response.data?.qr) {
         setQrCode(response.data.qr);
@@ -122,15 +201,64 @@ export default function WhatsAppPage() {
 
   const handleConnect = async () => {
     setStatus("connecting");
+    
+    // Tentar reiniciar via bot server local primeiro
+    try {
+      const response = await fetch(`${BOT_SERVER_URL}/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        setTimeout(() => {
+          checkBotServerConnection();
+          loadQRCode();
+        }, 2000);
+        return;
+      }
+    } catch (e) {
+      // Se falhar, tentar via API
+    }
+    
+    // Fallback: via API do Cloudflare
+    try {
+      await api.restartWhatsAppBot();
+      setTimeout(() => {
+        checkBotStatus();
+        loadQRCode();
+      }, 2000);
+    } catch (error) {
+      console.error("Erro ao reiniciar bot:", error);
+    }
+    
     await loadQRCode();
     setShowQRDialog(true);
   };
 
   const handleRestart = async () => {
+    setStatus("connecting");
+    setQrCode(null);
+    
+    try {
+      // Tentar via bot server local
+      const response = await fetch(`${BOT_SERVER_URL}/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        setTimeout(() => {
+          checkBotServerConnection();
+          loadQRCode();
+        }, 2000);
+        return;
+      }
+    } catch (e) {
+      // Fallback: via API
+    }
+    
     try {
       await api.restartWhatsAppBot();
-      setStatus("connecting");
-      setQrCode(null);
       setTimeout(() => {
         checkBotStatus();
         loadQRCode();
@@ -222,16 +350,41 @@ export default function WhatsAppPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-background">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
+      <div className="bg-card border-b px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">WhatsApp Web</h1>
+          <h1 className="text-2xl font-bold text-foreground">WhatsApp Web</h1>
           <p className="text-sm text-muted-foreground">
             Interface de mensagens do oConnector
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {/* Status do Bot Server */}
+          <div className="flex items-center gap-2">
+            {botServerConnected ? (
+              <Badge variant="outline" className="gap-1">
+                <Wifi className="h-3 w-3 text-green-500" />
+                Bot Server
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1">
+                <WifiOff className="h-3 w-3 text-red-500" />
+                Bot Offline
+              </Badge>
+            )}
+          </div>
+          
+          {/* Status do Agent IA */}
+          {agentStatus && (
+            <div className="flex items-center gap-2">
+              <Badge variant={agentStatus.ready ? "default" : "secondary"} className="gap-1">
+                <Bot className="h-3 w-3" />
+                Agent {agentStatus.ready ? "Ativo" : "Inativo"}
+              </Badge>
+            </div>
+          )}
+          
           {status === "disconnected" && (
             <Button onClick={handleConnect} size="sm">
               Conectar WhatsApp
@@ -242,11 +395,37 @@ export default function WhatsAppPage() {
               Reconectar
             </Button>
           )}
+          {status === "waiting_qr" && (
+            <Button onClick={handleConnect} variant="outline" size="sm">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Gerar QR Code
+            </Button>
+          )}
           <Badge variant={status === "connected" ? "default" : "secondary"}>
-            {status === "connected" && "✅ Conectado"}
-            {status === "waiting_qr" && "⏳ Aguardando QR Code"}
-            {status === "connecting" && "🔄 Conectando..."}
-            {status === "disconnected" && "❌ Desconectado"}
+            {status === "connected" && (
+              <>
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Conectado
+              </>
+            )}
+            {status === "waiting_qr" && (
+              <>
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Aguardando QR
+              </>
+            )}
+            {status === "connecting" && (
+              <>
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Conectando...
+              </>
+            )}
+            {status === "disconnected" && (
+              <>
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Desconectado
+              </>
+            )}
           </Badge>
           {botInfo?.whatsappNumber && (
             <span className="text-sm text-muted-foreground">
@@ -268,24 +447,48 @@ export default function WhatsAppPage() {
           <div className="flex flex-col items-center gap-4 py-4">
             {qrCode ? (
               <>
-                <div className="bg-white p-4 rounded-lg flex justify-center">
-                  <QRCodeSVG value={qrCode} size={256} />
+                <div className="bg-white p-4 rounded-lg flex justify-center border-2 border-primary">
+                  <QRCodeSVG value={qrCode} size={256} level="H" />
                 </div>
-                <p className="text-sm text-muted-foreground text-center">
-                  1. Abra o WhatsApp no celular<br />
-                  2. Vá em Menu → Aparelhos conectados<br />
-                  3. Toque em Conectar um aparelho<br />
-                  4. Escaneie este QR Code
-                </p>
-                <Button onClick={checkBotStatus} variant="outline" size="sm">
-                  Verificar Status
-                </Button>
+                <div className="space-y-2 text-center">
+                  <p className="text-sm font-semibold text-foreground">
+                    Como conectar:
+                  </p>
+                  <ol className="text-sm text-muted-foreground space-y-1 text-left max-w-md">
+                    <li>1. Abra o WhatsApp no seu celular</li>
+                    <li>2. Toque em <strong>Menu</strong> (três pontos) ou <strong>Configurações</strong></li>
+                    <li>3. Vá em <strong>Aparelhos conectados</strong></li>
+                    <li>4. Toque em <strong>Conectar um aparelho</strong></li>
+                    <li>5. Escaneie este QR Code</li>
+                  </ol>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={checkBotStatus} variant="outline" size="sm">
+                    <Loader2 className="h-4 w-4 mr-2" />
+                    Verificar Status
+                  </Button>
+                  <Button onClick={loadQRCode} variant="outline" size="sm">
+                    Atualizar QR Code
+                  </Button>
+                </div>
+                {!botServerConnected && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-400">
+                    <AlertCircle className="h-4 w-4 inline mr-2" />
+                    Bot server não está rodando. Inicie o servidor em: <code className="bg-background px-1 rounded">whatsapp-bot</code>
+                  </div>
+                )}
               </>
             ) : (
               <div className="text-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground">
                   Gerando QR Code...
                 </p>
+                {!botServerConnected && (
+                  <p className="text-sm text-destructive mt-2">
+                    Conecte-se ao bot server primeiro
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -294,9 +497,9 @@ export default function WhatsAppPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar - Conversas */}
-        <div className="w-80 bg-white border-r flex flex-col">
+        <div className="w-80 bg-card border-r flex flex-col">
           <div className="p-4 border-b">
-            <Input placeholder="Buscar conversas..." className="w-full" />
+            <Input placeholder="Buscar conversas..." className="w-full bg-background" />
           </div>
           <div className="flex-1 overflow-y-auto">
             {conversations.length === 0 ? (
@@ -308,8 +511,8 @@ export default function WhatsAppPage() {
                 <div
                   key={conv.id}
                   onClick={() => setSelectedConversation(conv.id)}
-                  className={`p-4 border-b cursor-pointer hover:bg-gray-50 ${
-                    selectedConversation === conv.id ? "bg-gray-100" : ""
+                  className={`p-4 border-b cursor-pointer hover:bg-accent transition-colors ${
+                    selectedConversation === conv.id ? "bg-accent" : ""
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -340,8 +543,8 @@ export default function WhatsAppPage() {
           {selectedConversation ? (
             <>
               {/* Header da conversa */}
-              <div className="bg-white border-b px-6 py-4">
-                <h2 className="font-semibold">
+              <div className="bg-card border-b px-6 py-4">
+                <h2 className="font-semibold text-foreground">
                   {
                     conversations.find((c) => c.id === selectedConversation)
                       ?.contactName
@@ -356,7 +559,7 @@ export default function WhatsAppPage() {
               </div>
 
               {/* Área de mensagens */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-background">
                 {loading ? (
                   <div className="text-center text-muted-foreground">
                     Carregando mensagens...
@@ -377,7 +580,7 @@ export default function WhatsAppPage() {
                         className={`max-w-[70%] rounded-lg px-4 py-2 ${
                           msg.fromMe
                             ? "bg-primary text-primary-foreground"
-                            : "bg-white border"
+                            : "bg-card border text-card-foreground"
                         }`}
                       >
                         <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
@@ -401,7 +604,7 @@ export default function WhatsAppPage() {
               </div>
 
               {/* Input de mensagem */}
-              <div className="bg-white border-t px-6 py-4">
+              <div className="bg-card border-t px-6 py-4">
                 <div className="flex gap-2">
                   <Input
                     ref={inputRef}
@@ -409,35 +612,55 @@ export default function WhatsAppPage() {
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Digite uma mensagem..."
-                    className="flex-1"
+                    className="flex-1 bg-background"
                     disabled={status !== "connected"}
                   />
                   <Button 
                     onClick={sendMessage} 
                     disabled={!newMessage.trim() || status !== "connected"}
                   >
-                    Enviar
+                    {status === "connected" ? "Enviar" : "Aguardando conexão"}
                   </Button>
                 </div>
+                {status !== "connected" && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Conecte o WhatsApp para enviar mensagens
+                  </p>
+                )}
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-gray-50">
-              <div className="text-center">
+            <div className="flex-1 flex items-center justify-center bg-background">
+              <div className="text-center max-w-md px-4">
                 <div className="text-6xl mb-4">💬</div>
-                <h2 className="text-2xl font-semibold mb-2">
+                <h2 className="text-2xl font-semibold mb-2 text-foreground">
                   {status === "connected" 
                     ? "Selecione uma conversa"
                     : "Conecte o WhatsApp primeiro"}
                 </h2>
                 <p className="text-muted-foreground mb-4">
                   {status === "connected"
-                    ? "Escolha uma conversa da lista para começar"
-                    : "Clique em 'Conectar WhatsApp' para começar"}
+                    ? "Escolha uma conversa da lista para começar a conversar"
+                    : status === "waiting_qr"
+                    ? "Escaneie o QR Code para conectar"
+                    : "Clique em 'Conectar WhatsApp' para gerar o QR Code e começar"}
                 </p>
                 {status === "disconnected" && (
-                  <Button onClick={handleConnect}>
-                    Conectar WhatsApp
+                  <div className="space-y-3">
+                    <Button onClick={handleConnect} size="lg">
+                      Conectar WhatsApp
+                    </Button>
+                    {!botServerConnected && (
+                      <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-400">
+                        <AlertCircle className="h-4 w-4 inline mr-2" />
+                        Bot server não está rodando. Inicie com: <code className="bg-background px-1 rounded">cd whatsapp-bot && npm run server</code>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {status === "waiting_qr" && !showQRDialog && (
+                  <Button onClick={() => setShowQRDialog(true)} variant="outline">
+                    Ver QR Code
                   </Button>
                 )}
               </div>

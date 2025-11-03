@@ -164,18 +164,97 @@ class ApiClient {
   }
 
   async getWhatsAppStatus() {
+    // Tentar primeiro bot server local (se disponível)
+    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
+    
+    try {
+      const response = await fetch(`${botServerUrl}/status`);
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          data: {
+            status: data.status,
+            qr: data.qr,
+            info: data.info,
+            ready: data.ready,
+          },
+        };
+      }
+    } catch (e) {
+      // Fallback para API do Cloudflare
+    }
+    
     return this.request<{ status: string; qr?: string }>('/api/whatsapp/status');
   }
 
   async getWhatsAppQR() {
+    // Tentar primeiro bot server local
+    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
+    
+    try {
+      const response = await fetch(`${botServerUrl}/qr`);
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: data.success || !!data.qr,
+          data: {
+            qr: data.qr,
+            status: data.status,
+          },
+        };
+      }
+    } catch (e) {
+      // Fallback para API do Cloudflare
+    }
+    
     return this.request<{ success: boolean; qr?: string; status: string }>('/api/whatsapp/qr');
   }
 
   async getWhatsAppBotStatus() {
+    // Tentar primeiro bot server local
+    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
+    
+    try {
+      const response = await fetch(`${botServerUrl}/info`);
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: true,
+          data: {
+            status: data.status,
+            ready: data.ready || false,
+            info: data.info,
+          },
+        };
+      }
+    } catch (e) {
+      // Fallback para API do Cloudflare
+    }
+    
     return this.request<{ status: string; ready: boolean; info: any }>('/api/whatsapp/bot-status');
   }
 
   async restartWhatsAppBot() {
+    // Tentar primeiro bot server local
+    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
+    
+    try {
+      const response = await fetch(`${botServerUrl}/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          success: data.success || true,
+          data: data,
+        };
+      }
+    } catch (e) {
+      // Fallback para API do Cloudflare
+    }
+    
     return this.request<any>('/api/whatsapp/bot/restart', {
       method: 'POST',
     });
