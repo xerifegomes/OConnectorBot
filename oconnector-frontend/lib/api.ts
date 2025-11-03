@@ -221,21 +221,17 @@ class ApiClient {
   }
 
   async getWhatsAppStatus() {
-    // VERIFICAÇÃO EXPLÍCITA: Só tentar localhost se estiver EXATAMENTE em localhost
-    if (typeof window === 'undefined') {
-      // Server-side: usar apenas API do Cloudflare
+    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
+    // Só tentar localhost se estiver EXATAMENTE em localhost
+    const isLocalDev = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    if (!isLocalDev) {
+      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
       return this.request<{ status: string; qr?: string }>('/api/whatsapp/status');
     }
     
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    
-    // Se NÃO for localhost, usar APENAS API do Cloudflare
-    if (!isLocalhost) {
-      return this.request<{ status: string; qr?: string }>('/api/whatsapp/status');
-    }
-    
-    // Só chega aqui se for localhost
+    // Só tenta localhost se for realmente localhost
     const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
     
     try {
@@ -265,20 +261,17 @@ class ApiClient {
   }
 
   async getWhatsAppQR() {
-    // VERIFICAÇÃO EXPLÍCITA: Só tentar localhost se estiver EXATAMENTE em localhost
-    if (typeof window === 'undefined') {
+    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
+    // Só tentar localhost se estiver EXATAMENTE em localhost
+    const isLocalDev = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    if (!isLocalDev) {
+      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
       return this.request<{ success: boolean; qr?: string; status: string }>('/api/whatsapp/qr');
     }
     
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    
-    // Se NÃO for localhost, usar APENAS API do Cloudflare
-    if (!isLocalhost) {
-      return this.request<{ success: boolean; qr?: string; status: string }>('/api/whatsapp/qr');
-    }
-    
-    // Só chega aqui se for localhost
+    // Só tenta localhost se for realmente localhost
     const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
     
     try {
@@ -306,20 +299,17 @@ class ApiClient {
   }
 
   async getWhatsAppBotStatus() {
-    // VERIFICAÇÃO EXPLÍCITA: Só tentar localhost se estiver EXATAMENTE em localhost
-    if (typeof window === 'undefined') {
+    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
+    // Só tentar localhost se estiver EXATAMENTE em localhost
+    const isLocalDev = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    if (!isLocalDev) {
+      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
       return this.request<{ status: string; ready: boolean; info: any }>('/api/whatsapp/bot-status');
     }
     
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    
-    // Se NÃO for localhost, usar APENAS API do Cloudflare
-    if (!isLocalhost) {
-      return this.request<{ status: string; ready: boolean; info: any }>('/api/whatsapp/bot-status');
-    }
-    
-    // Só chega aqui se for localhost
+    // Só tenta localhost se for realmente localhost
     const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
     
     try {
@@ -348,24 +338,19 @@ class ApiClient {
   }
 
   async restartWhatsAppBot() {
-    // VERIFICAÇÃO EXPLÍCITA: Só tentar localhost se estiver EXATAMENTE em localhost
-    if (typeof window === 'undefined') {
+    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
+    // Só tentar localhost se estiver EXATAMENTE em localhost
+    const isLocalDev = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    if (!isLocalDev) {
+      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
       return this.request<any>('/api/whatsapp/bot/restart', {
         method: 'POST',
       });
     }
     
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    
-    // Se NÃO for localhost, usar APENAS API do Cloudflare
-    if (!isLocalhost) {
-      return this.request<any>('/api/whatsapp/bot/restart', {
-        method: 'POST',
-      });
-    }
-    
-    // Só chega aqui se for localhost
+    // Só tenta localhost se for realmente localhost
     const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
     
     try {
