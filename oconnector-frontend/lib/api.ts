@@ -221,36 +221,34 @@ class ApiClient {
   }
 
   async getWhatsAppStatus() {
-    // Só tentar bot server local em desenvolvimento
-    // Em produção (oconnector.pages.dev), usar apenas API do Cloudflare
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      const isDevelopment = hostname === 'localhost' || hostname === '127.0.0.1';
+    // Em produção, NUNCA tentar localhost
+    // Só usar bot server local se estiver explicitamente em localhost
+    const isLocalhost = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    if (isLocalhost) {
+      const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
       
-      if (isDevelopment) {
-        const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
-        
-        try {
-          const response = await fetch(`${botServerUrl}/status`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (response.ok) {
-            const data = await response.json();
-            return {
-              success: true,
-              data: {
-                status: data.status,
-                qr: data.qr,
-                info: data.info,
-                ready: data.ready,
-              },
-            };
-          }
-        } catch (e) {
-          // Silenciosamente fallback para API do Cloudflare
-          console.debug('Bot server local não disponível, usando API do Cloudflare');
+      try {
+        const response = await fetch(`${botServerUrl}/status`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            success: true,
+            data: {
+              status: data.status,
+              qr: data.qr,
+              info: data.info,
+              ready: data.ready,
+            },
+          };
         }
+      } catch (e) {
+        // Silenciosamente fallback para API do Cloudflare
       }
     }
     
@@ -259,33 +257,31 @@ class ApiClient {
   }
 
   async getWhatsAppQR() {
-    // Só tentar bot server local em desenvolvimento
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      const isDevelopment = hostname === 'localhost' || hostname === '127.0.0.1';
+    // Em produção, NUNCA tentar localhost
+    const isLocalhost = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    if (isLocalhost) {
+      const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
       
-      if (isDevelopment) {
-        const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
-        
-        try {
-          const response = await fetch(`${botServerUrl}/qr`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (response.ok) {
-            const data = await response.json();
-            return {
-              success: data.success || !!data.qr,
-              data: {
-                qr: data.qr,
-                status: data.status,
-              },
-            };
-          }
-        } catch (e) {
-          // Silenciosamente fallback para API do Cloudflare
-          console.debug('Bot server local não disponível para QR, usando API do Cloudflare');
+      try {
+        const response = await fetch(`${botServerUrl}/qr`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            success: data.success || !!data.qr,
+            data: {
+              qr: data.qr,
+              status: data.status,
+            },
+          };
         }
+      } catch (e) {
+        // Silenciosamente fallback para API do Cloudflare
       }
     }
     
@@ -294,17 +290,18 @@ class ApiClient {
   }
 
   async getWhatsAppBotStatus() {
-    // Tentar primeiro bot server local (apenas em desenvolvimento)
-    const isDevelopment = typeof window !== 'undefined' && 
+    // Em produção, NUNCA tentar localhost
+    const isLocalhost = typeof window !== 'undefined' && 
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     
-    if (isDevelopment) {
+    if (isLocalhost) {
       const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
       
       try {
         const response = await fetch(`${botServerUrl}/info`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
+          mode: 'cors',
         });
         if (response.ok) {
           const data = await response.json();
@@ -319,39 +316,36 @@ class ApiClient {
         }
       } catch (e) {
         // Silenciosamente fallback para API do Cloudflare
-        console.debug('Bot server local não disponível para status, usando API do Cloudflare');
       }
     }
     
-    // Fallback para API do Cloudflare
+    // Em produção, usar apenas API do Cloudflare
     return this.request<{ status: string; ready: boolean; info: any }>('/api/whatsapp/bot-status');
   }
 
   async restartWhatsAppBot() {
-    // Só tentar bot server local em desenvolvimento
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      const isDevelopment = hostname === 'localhost' || hostname === '127.0.0.1';
+    // Em produção, NUNCA tentar localhost
+    const isLocalhost = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    
+    if (isLocalhost) {
+      const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
       
-      if (isDevelopment) {
-        const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
-        
-        try {
-          const response = await fetch(`${botServerUrl}/restart`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (response.ok) {
-            const data = await response.json();
-            return {
-              success: data.success || true,
-              data: data,
-            };
-          }
-        } catch (e) {
-          // Silenciosamente fallback para API do Cloudflare
-          console.debug('Bot server local não disponível para restart, usando API do Cloudflare');
+      try {
+        const response = await fetch(`${botServerUrl}/restart`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          mode: 'cors',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            success: data.success || true,
+            data: data,
+          };
         }
+      } catch (e) {
+        // Silenciosamente fallback para API do Cloudflare
       }
     }
     
