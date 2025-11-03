@@ -44,6 +44,8 @@ class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers,
+        mode: 'cors', // Garantir CORS
+        credentials: 'omit', // Não enviar cookies
       });
 
       let data;
