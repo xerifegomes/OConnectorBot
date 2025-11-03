@@ -271,20 +271,51 @@ export default function WhatsAppPage() {
   const loadConversations = async () => {
     try {
       const response = await api.getWhatsAppConversations();
-      if (response.success && response.data) {
-        // Garantir que data é um array
-        const conversationsData = Array.isArray(response.data) ? response.data : [];
-        setConversations(conversationsData.map((conv: any) => ({
-          id: conv.id || conv.contact,
-          contact: conv.contact,
-          contactName: conv.contactName,
-          lastMessage: conv.lastMessage || 'Sem mensagens',
-          lastMessageTime: new Date(conv.lastMessageTime),
-          unread: conv.unread || 0,
-        })));
+      // Debug: verificar estrutura da resposta
+      console.log("Response loadConversations:", response);
+      
+      // Verificar se response existe e tem data
+      if (!response) {
+        console.warn("Response vazio em loadConversations");
+        setConversations([]);
+        return;
       }
+      
+      // Se não for sucesso, retornar array vazio
+      if (!response.success) {
+        console.warn("Response não sucesso:", response.error || response.message);
+        setConversations([]);
+        return;
+      }
+      
+      // Garantir que data existe e é um array
+      if (!response.data) {
+        console.warn("Response.data não existe");
+        setConversations([]);
+        return;
+      }
+      
+      // Converter para array se necessário
+      let conversationsData: any[] = [];
+      if (Array.isArray(response.data)) {
+        conversationsData = response.data;
+      } else if (typeof response.data === 'object') {
+        // Se for objeto, tentar extrair array ou usar como array vazio
+        console.warn("Response.data não é array, é objeto:", response.data);
+        conversationsData = [];
+      }
+      
+      setConversations(conversationsData.map((conv: any) => ({
+        id: conv.id || conv.contact || `conv-${Date.now()}`,
+        contact: conv.contact || '',
+        contactName: conv.contactName || conv.contact || 'Sem nome',
+        lastMessage: conv.lastMessage || 'Sem mensagens',
+        lastMessageTime: conv.lastMessageTime ? new Date(conv.lastMessageTime) : new Date(),
+        unread: conv.unread || 0,
+      })));
     } catch (error) {
       console.error("Erro ao carregar conversas:", error);
+      setConversations([]); // Garantir que sempre é array vazio em caso de erro
     }
   };
 

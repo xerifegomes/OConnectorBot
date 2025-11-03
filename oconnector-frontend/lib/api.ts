@@ -46,19 +46,44 @@ class ApiClient {
         headers,
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        // Se não for JSON válido, retornar erro
+        const text = await response.text();
+        console.error("Erro ao parsear JSON:", text);
+        return {
+          success: false,
+          message: 'Resposta inválida do servidor',
+          error: 'Invalid JSON response',
+        };
+      }
 
       if (!response.ok) {
         return {
           success: false,
           message: data.message || data.error || 'Erro na requisição',
           error: data.error,
+          data: Array.isArray(data) ? data : (data.data || []), // Garantir array mesmo em erro
         };
+      }
+
+      // Se data já é um array, retornar diretamente
+      // Se data tem propriedade data que é array, usar ela
+      // Caso contrário, retornar data como está
+      let finalData = data;
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        if (Array.isArray(data.data)) {
+          finalData = data.data;
+        } else if (data.data !== undefined) {
+          finalData = data.data;
+        }
       }
 
       return {
         success: true,
-        data,
+        data: finalData,
       };
     } catch (error) {
       return {
