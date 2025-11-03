@@ -43,8 +43,13 @@ export default function WhatsAppPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const qrPollInterval = useRef<NodeJS.Timeout | null>(null);
   
-  // URL do bot server local (pode ser configurado via env)
-  const BOT_SERVER_URL = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
+  // URL do bot server local (apenas em desenvolvimento)
+  // Em produção, usar sempre API do Cloudflare
+  const isDevelopment = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const BOT_SERVER_URL = isDevelopment 
+    ? (process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001')
+    : null;
 
   useEffect(() => {
     loadConversations();
@@ -86,6 +91,12 @@ export default function WhatsAppPage() {
   };
 
   const checkBotServerConnection = async () => {
+    // Só tentar bot server local em desenvolvimento
+    if (!isDevelopment || !BOT_SERVER_URL) {
+      setBotServerConnected(false);
+      return;
+    }
+    
     try {
       // Tentar conectar direto ao bot server local
       const response = await fetch(`${BOT_SERVER_URL}/status`, {
@@ -114,9 +125,12 @@ export default function WhatsAppPage() {
         setBotServerConnected(false);
       }
     } catch (error) {
+      // Silenciosamente ignorar erro em produção
       setBotServerConnected(false);
-      // Se falhar, tentar via API do Cloudflare
-      await checkBotStatus();
+      // Se falhar, tentar via API do Cloudflare apenas em desenvolvimento
+      if (isDevelopment) {
+        await checkBotStatus();
+      }
     }
   };
 
@@ -161,19 +175,24 @@ export default function WhatsAppPage() {
 
   const loadQRCode = async () => {
     try {
-      // Tentar primeiro do bot server local
-      try {
-        const botResponse = await fetch(`${BOT_SERVER_URL}/qr`);
-        if (botResponse.ok) {
-          const botData = await botResponse.json();
-          if (botData.qr) {
-            setQrCode(botData.qr);
-            setShowQRDialog(true);
-            return;
+      // Tentar primeiro do bot server local (apenas em desenvolvimento)
+      if (isDevelopment && BOT_SERVER_URL) {
+        try {
+          const botResponse = await fetch(`${BOT_SERVER_URL}/qr`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (botResponse.ok) {
+            const botData = await botResponse.json();
+            if (botData.qr) {
+              setQrCode(botData.qr);
+              setShowQRDialog(true);
+              return;
+            }
           }
+        } catch (e) {
+          // Silenciosamente ignorar e tentar via API
         }
-      } catch (e) {
-        // Se falhar, tentar via API
       }
       
       // Fallback: via API do Cloudflare
@@ -202,22 +221,24 @@ export default function WhatsAppPage() {
   const handleConnect = async () => {
     setStatus("connecting");
     
-    // Tentar reiniciar via bot server local primeiro
-    try {
-      const response = await fetch(`${BOT_SERVER_URL}/restart`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      if (response.ok) {
-        setTimeout(() => {
-          checkBotServerConnection();
-          loadQRCode();
-        }, 2000);
-        return;
+    // Tentar reiniciar via bot server local primeiro (apenas em desenvolvimento)
+    if (isDevelopment && BOT_SERVER_URL) {
+      try {
+        const response = await fetch(`${BOT_SERVER_URL}/restart`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        if (response.ok) {
+          setTimeout(() => {
+            checkBotServerConnection();
+            loadQRCode();
+          }, 2000);
+          return;
+        }
+      } catch (e) {
+        // Silenciosamente ignorar e tentar via API
       }
-    } catch (e) {
-      // Se falhar, tentar via API
     }
     
     // Fallback: via API do Cloudflare
