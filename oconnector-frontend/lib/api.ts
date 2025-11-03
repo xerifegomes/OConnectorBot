@@ -74,13 +74,19 @@ class ApiClient {
       // Caso contrário, retornar data como está
       let finalData = data;
       if (data && typeof data === 'object' && !Array.isArray(data)) {
-        if (Array.isArray(data.data)) {
-          finalData = data.data;
-        } else if (data.data !== undefined) {
-          finalData = data.data;
+        const dataObj = data as any;
+        if (Array.isArray(dataObj.data)) {
+          finalData = dataObj.data;
+        } else if (dataObj.data !== undefined) {
+          finalData = dataObj.data;
+        } else if (Array.isArray(dataObj)) {
+          // Se data em si é um array (caso especial)
+          finalData = dataObj;
         }
       }
 
+      // Garantir que finalData é sempre o que esperamos
+      // Se for endpoint que retorna array, garantir que seja array
       return {
         success: true,
         data: finalData,

@@ -54,7 +54,10 @@ export default function WhatsAppPage() {
   useEffect(() => {
     loadConversations();
     checkBotStatus();
-    checkBotServerConnection();
+    // Só tentar bot server local em desenvolvimento
+    if (isDevelopment && BOT_SERVER_URL) {
+      checkBotServerConnection();
+    }
     checkAgentStatus();
     startQRPolling();
     
@@ -83,7 +86,10 @@ export default function WhatsAppPage() {
     // Polling para verificar QR Code e status
     qrPollInterval.current = setInterval(async () => {
       await checkBotStatus();
-      await checkBotServerConnection();
+      // Só tentar bot server local em desenvolvimento
+      if (isDevelopment && BOT_SERVER_URL) {
+        await checkBotServerConnection();
+      }
       if (status === "waiting_qr" && !qrCode) {
         await loadQRCode();
       }
