@@ -1,0 +1,443 @@
+# 🔍 oConnector - Especificação de Auditoria Completa
+# Versão: 1.0
+# Data: 2024-11-02
+
+project:
+  name: oConnector
+  version: 0.1.0
+  description: "Landing Page + Sistema de Login + Dashboard integrado com Cloudflare Workers"
+  
+architecture:
+  frontend:
+    - name: "HTML/CSS/JS Static"
+      location: "/"
+      files:
+        - index.html
+        - login.html
+        - cadastro.html
+        - dashboard.html
+        - recuperar-senha.html
+        - css/main.css
+        - js/api.js
+        - js/auth.js
+        - js/dashboard.js
+        - js/main.js
+      status: "✅ Completo"
+      
+    - name: "Next.js Modern Frontend"
+      location: "/oconnector-frontend"
+      framework: "Next.js 16.0.1"
+      react: "19.2.0"
+      typescript: true
+      files:
+        app:
+          - "app/(marketing)/page.tsx"
+          - "app/(auth)/login/page.tsx"
+          - "app/(auth)/cadastro/page.tsx"
+          - "app/(dashboard)/dashboard/page.tsx"
+          - "app/(dashboard)/leads/page.tsx"
+          - "app/(dashboard)/prospects/page.tsx"
+        components:
+          - "components/ui/*"
+          - "components/dashboard/sidebar.tsx"
+        lib:
+          - "lib/api.ts"
+          - "lib/google.ts"
+          - "lib/utils.ts"
+      status: "✅ Funcional"
+      
+  backend:
+    url: "https://oconnector-api.xerifegomes-e71.workers.dev"
+    type: "Cloudflare Workers"
+    database: "D1 Database"
+    auth: "JWT + Cloudflare KV"
+    status: "⚠️ Requer verificação"
+
+audit_sections:
+  - name: "Estrutura e Arquitetura"
+    checks:
+      - item: "Organização de arquivos"
+        priority: "high"
+        expected: "Estrutura modular e escalável"
+        
+      - item: "Separação de responsabilidades"
+        priority: "high"
+        expected: "Lógica separada por camadas"
+        
+      - item: "Padrões de código"
+        priority: "medium"
+        expected: "Convenções do framework seguidas"
+        
+      - item: "Estrutura de pastas"
+        priority: "medium"
+        expected: "Organização clara (app, components, lib)"
+    
+  - name: "Segurança"
+    checks:
+      - item: "Credenciais expostas"
+        priority: "critical"
+        status: "❌ Tokens expostos publicamente"
+        action: "Renovar todas as credenciais"
+        
+      - item: "Autenticação JWT"
+        priority: "critical"
+        status: "⚠️ localStorage vulnerável a XSS"
+        action: "Mover para httpOnly cookies"
+        
+      - item: "Validação de inputs"
+        priority: "high"
+        status: "⚠️ Apenas HTML5 básica"
+        action: "Implementar validação Zod completa"
+        
+      - item: "Middleware de proteção"
+        priority: "high"
+        status: "❌ Apenas client-side"
+        action: "Implementar middleware Next.js"
+        
+      - item: "CSRF Protection"
+        priority: "high"
+        status: "❌ Não implementado"
+        action: "Adicionar proteção CSRF"
+        
+      - item: "CSP Headers"
+        priority: "medium"
+        status: "❌ Não configurado"
+        action: "Configurar Content-Security-Policy"
+        
+      - item: "Rate Limiting"
+        priority: "medium"
+        status: "❌ Não implementado"
+        action: "Implementar rate limiting"
+        
+      - item: "XSS Protection"
+        priority: "high"
+        status: "⚠️ Depende do React"
+        action: "Sanitizar inputs server-side"
+        
+  - name: "Dependências"
+    checks:
+      - item: "Versões atualizadas"
+        priority: "high"
+        status: "⚠️ Algumas dependências desatualizadas"
+        
+      - item: "Vulnerabilidades conhecidas"
+        priority: "critical"
+        status: "⚠️ cookie library com vulnerabilidade"
+        action: "Atualizar dependências"
+        
+      - item: "Dependências deprecated"
+        priority: "high"
+        status: "⚠️ @cloudflare/next-on-pages deprecated"
+        action: "Usar OpenNext adapter"
+        
+      - item: "Peer dependencies"
+        priority: "medium"
+        status: "⚠️ Conflitos resolvidos com --legacy-peer-deps"
+        
+  - name: "Funcionalidades"
+    checks:
+      - item: "Landing Page"
+        status: "✅ Completa"
+        sections:
+          - Hero
+          - Features
+          - How It Works
+          - Pricing
+          - Testimonials
+          - CTA
+        
+      - item: "Autenticação"
+        status: "⚠️ Funcional mas insegura"
+        features:
+          - Login: "✅"
+          - Cadastro: "✅"
+          - Verificação Token: "✅"
+          - Recuperação Senha: "✅ UI, ⚠️ Backend"
+          - Logout: "✅"
+        
+      - item: "Dashboard"
+        status: "✅ Funcional"
+        pages:
+          - Dashboard Principal: "✅"
+          - Leads: "✅"
+          - Prospects: "✅"
+          - Configurações: "⚠️ UI básica"
+        
+      - item: "Integração API"
+        status: "✅ Cliente implementado"
+        endpoints:
+          - "/api/auth/*": "✅"
+          - "/api/clientes/*": "✅"
+          - "/api/leads/*": "✅"
+          - "/api/prospects/*": "✅"
+        
+      - item: "Design System"
+        status: "✅ Implementado"
+        components: "11 componentes shadcn/ui"
+        theme: "Dark mode configurado"
+        
+  - name: "Qualidade de Código"
+    checks:
+      - item: "TypeScript"
+        status: "✅ Configurado"
+        strict: true
+        issue: "⚠️ Uso de 'any' em vários lugares"
+        action: "Criar tipos adequados"
+        
+      - item: "Linter"
+        status: "✅ ESLint configurado"
+        errors: 0
+        
+      - item: "Formatação"
+        status: "✅ Consistente"
+        
+      - item: "Comentários"
+        status: "⚠️ Poucos comentários"
+        action: "Adicionar JSDoc"
+        
+      - item: "Documentação"
+        status: "⚠️ Básica"
+        files:
+          - README.md: "✅"
+          - ENV.md: "✅"
+          - AUDITORIA_*.md: "✅"
+        
+  - name: "Testes"
+    checks:
+      - item: "Testes unitários"
+        status: "❌ Não implementado"
+        priority: "high"
+        action: "Configurar Jest + Testing Library"
+        
+      - item: "Testes E2E"
+        status: "❌ Não implementado"
+        priority: "medium"
+        action: "Configurar Playwright ou Cypress"
+        
+      - item: "Cobertura de testes"
+        status: "❌ 0%"
+        target: "80% mínimo"
+        
+  - name: "Performance"
+    checks:
+      - item: "Bundle size"
+        status: "⚠️ Não otimizado"
+        action: "Analisar e otimizar"
+        
+      - item: "Lazy loading"
+        status: "❌ Não implementado"
+        action: "Adicionar lazy loading de componentes"
+        
+      - item: "Cache"
+        status: "❌ Não implementado"
+        action: "Implementar cache de requisições"
+        
+      - item: "Image optimization"
+        status: "⚠️ Não configurado"
+        action: "Usar next/image"
+        
+  - name: "Acessibilidade"
+    checks:
+      - item: "ARIA labels"
+        status: "⚠️ Básico"
+        action: "Adicionar labels adequados"
+        
+      - item: "Keyboard navigation"
+        status: "✅ Radix UI ajuda"
+        action: "Testar navegação completa"
+        
+      - item: "Screen readers"
+        status: "⚠️ Não testado"
+        action: "Testar com leitores de tela"
+        
+      - item: "Contrast"
+        status: "✅ Design system ajuda"
+        
+  - name: "Deploy e DevOps"
+    checks:
+      - item: "Cloudflare Pages"
+        status: "⚠️ Configurado mas precisa ajuste"
+        issue: "Next.js 16 requer OpenNext"
+        action: "Configurar OpenNext adapter"
+        
+      - item: "CI/CD"
+        status: "❌ Não configurado"
+        action: "Configurar pipeline"
+        
+      - item: "Variáveis de ambiente"
+        status: "⚠️ Documentadas mas não usadas"
+        action: "Implementar uso de env vars"
+        
+      - item: "Build process"
+        status: "✅ Funcional"
+        
+  - name: "Tratamento de Erros"
+    checks:
+      - item: "Error boundaries"
+        status: "❌ Não implementado"
+        priority: "high"
+        action: "Adicionar error boundaries"
+        
+      - item: "Logging"
+        status: "❌ Não configurado"
+        action: "Implementar logging estruturado"
+        
+      - item: "Error messages"
+        status: "⚠️ Genéricos"
+        action: "Melhorar mensagens de erro"
+        
+      - item: "Retry logic"
+        status: "❌ Não implementado"
+        action: "Adicionar retry para requisições"
+        
+  - name: "Componentes Faltantes"
+    priority_order:
+      - name: "Middleware de autenticação"
+        priority: "critical"
+        location: "app/middleware.ts"
+        description: "Proteção server-side de rotas"
+        
+      - name: "Error boundaries"
+        priority: "high"
+        location: "app/error.tsx, app/global-error.tsx"
+        description: "Tratamento de erros React"
+        
+      - name: "Loading states"
+        priority: "high"
+        location: "app/*/loading.tsx"
+        description: "Estados de carregamento"
+        
+      - name: "Not found page"
+        priority: "medium"
+        location: "app/not-found.tsx"
+        description: "Página 404 customizada"
+        
+      - name: "Types TypeScript"
+        priority: "high"
+        location: "types/*.ts"
+        description: "Tipos globais e interfaces"
+        
+      - name: "Custom hooks"
+        priority: "medium"
+        location: "hooks/*.ts"
+        description: "Hooks reutilizáveis"
+        
+      - item: "Test utilities"
+        priority: "medium"
+        location: "lib/test-utils.tsx"
+        description: "Utilitários para testes"
+
+testing_requirements:
+  unit_tests:
+    priority: "high"
+    tools: ["Jest", "@testing-library/react", "@testing-library/jest-dom"]
+    coverage:
+      minimum: 80
+      critical: 95
+    files_to_test:
+      - "lib/api.ts"
+      - "lib/utils.ts"
+      - "components/ui/*"
+      - "components/dashboard/*"
+      
+  integration_tests:
+    priority: "medium"
+    tools: ["Jest", "MSW (Mock Service Worker)"]
+    scenarios:
+      - "Autenticação completa"
+      - "Fluxo de cadastro"
+      - "Carregamento de dados"
+      
+  e2e_tests:
+    priority: "medium"
+    tools: ["Playwright", "Cypress"]
+    scenarios:
+      - "Login → Dashboard"
+      - "Cadastro → Verificação → Dashboard"
+      - "Gestão de leads"
+      - "Busca de prospects"
+      
+  api_tests:
+    priority: "high"
+    tools: ["Jest", "Supertest"]
+    endpoints:
+      - "GET /api/auth/verify"
+      - "POST /api/auth/login"
+      - "POST /api/auth/register"
+      - "GET /api/clientes/me"
+      - "GET /api/leads"
+      - "GET /api/leads/stats"
+
+security_checks:
+  critical:
+    - "Renovar todas as credenciais expostas"
+    - "Mover JWT para httpOnly cookies"
+    - "Implementar middleware de autenticação"
+    - "Adicionar validação Zod completa"
+    
+  high:
+    - "Configurar CSP headers"
+    - "Implementar CSRF protection"
+    - "Adicionar rate limiting"
+    - "Sanitizar inputs server-side"
+    
+  medium:
+    - "Implementar refresh tokens"
+    - "Adicionar 2FA/MFA"
+    - "Configurar logging de segurança"
+
+action_plan:
+  day_1_2:
+    priority: "critical"
+    tasks:
+      - "Renovar todas as credenciais expostas"
+      - "Implementar middleware de autenticação básica"
+      - "Mover JWT para httpOnly cookies"
+      - "Adicionar validação Zod nos formulários"
+      
+  day_3_4:
+    priority: "high"
+    tasks:
+      - "Configurar testes unitários básicos"
+      - "Adicionar error boundaries"
+      - "Implementar tratamento de erros robusto"
+      - "Configurar CSP headers"
+      
+  day_5_6:
+    priority: "medium"
+    tasks:
+      - "Criar tipos TypeScript adequados"
+      - "Adicionar loading states"
+      - "Implementar retry logic"
+      - "Otimizar bundle size"
+      
+  day_7:
+    priority: "review"
+    tasks:
+      - "Revisão completa de segurança"
+      - "Testes end-to-end básicos"
+      - "Documentação final"
+      - "Preparação para produção"
+
+deliverables:
+  reports:
+    - "Relatório de estado atual por componente"
+    - "Lista de bugs e vulnerabilidades priorizadas"
+    - "Lista de componentes faltantes com priorização"
+    - "Action plan detalhado 7 dias"
+    - "Scripts de teste para validação"
+    
+  scripts:
+    - "scripts/test-unit.sh"
+    - "scripts/test-integration.sh"
+    - "scripts/test-e2e.sh"
+    - "scripts/security-check.sh"
+    - "scripts/audit-dependencies.sh"
+    
+  documentation:
+    - "AUDITORIA_COMPLETA_REPORT.md"
+    - "BUGS_ENCONTRADOS.md"
+    - "COMPONENTES_FALTANTES.md"
+    - "ACTION_PLAN_7_DAYS.md"
+    - "TEST_SCRIPTS.md"
+

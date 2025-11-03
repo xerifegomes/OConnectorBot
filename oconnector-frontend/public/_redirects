@@ -1,0 +1,6 @@
+# Redirects para SPA (Single Page Application)
+# Todas as rotas devem apontar para index.html
+# Cloudflare Pages precisa disso para funcionar com Next.js
+
+/*    /index.html   200
+

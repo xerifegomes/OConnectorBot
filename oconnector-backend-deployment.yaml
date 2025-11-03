@@ -1,0 +1,645 @@
+# 🚀 oConnector - Prompt YAML Final para Deployment Backend Completo
+
+# =============================================================================
+# PROJETO: oConnector Backend - Deployment Final
+# VERSÃO: 1.0 Final
+# DATA: 2025-11-02
+# OBJETIVO: Deploy completo e funcional do backend em Cloudflare Workers
+# =============================================================================
+
+project:
+  name: "oConnector Backend"
+  version: "1.0.0"
+  description: "Sistema SaaS multi-tenant para captação de leads com IA"
+  stack: "Cloudflare Workers + D1 + Workers AI + Vectorize"
+  deployment_target: "Produção"
+
+# =============================================================================
+# ARQUITETURA BACKEND
+# =============================================================================
+
+architecture:
+  overview: |
+    Sistema serverless multi-tenant com 2 workers principais:
+    1. oconnector-api: CRUD + Google Places + Geração mensagens IA
+    2. agent-training-worker: RAG + Treinamento agentes personalizados
+  
+  components:
+    workers:
+      - name: "oconnector-api"
+        purpose: "API principal do sistema"
+        routes:
+          - "/api/prospects"
+          - "/api/clientes"
+          - "/api/leads"
+          - "/api/prospectar"
+          - "/api/gerar-mensagem"
+      
+      - name: "agent-training-worker"
+        purpose: "Sistema RAG para agentes IA"
+        routes:
+          - "/api/train"
+          - "/api/query"
+          - "/api/status/:id"
+    
+    database:
+      type: "D1 Database"
+      name: "oconnector_db"
+      tables:
+        - "prospects (prospecção Google Places)"
+        - "clientes (clientes oConnector)"
+        - "leads (leads capturados pelos bots)"
+        - "conhecimento (fallback Vectorize)"
+    
+    ai:
+      models:
+        embeddings: "@cf/baai/bge-base-en-v1.5"
+        llm: "@cf/meta/llama-3-8b-instruct"
+      features:
+        - "Geração de mensagens personalizadas"
+        - "RAG para respostas contextualizadas"
+        - "Classificação automática de prospects"
+
+# =============================================================================
+# DEPLOYMENT CHECKLIST
+# =============================================================================
+
+deployment_checklist:
+  
+  pre_deployment:
+    environment:
+      - task: "Verificar credenciais Google API"
+        status: "pending"
+        priority: "critical"
+        action: |
+          1. Confirmar GOOGLE_PLACES_KEY válida
+          2. Testar request Google Places API
+          3. Verificar quotas e limites
+      
+      - task: "Configurar variáveis de ambiente"
+        status: "pending"
+        priority: "critical"
+        variables:
+          - "GOOGLE_API_KEY"
+          - "GOOGLE_OAUTH_CLIENT_ID"
+          - "GOOGLE_OAUTH_CLIENT_SECRET"
+          - "GOOGLE_PLACES_KEY"
+          - "GOOGLE_SHEETS_ID"
+    
+    database:
+      - task: "Criar tabelas faltantes"
+        status: "pending"
+        priority: "critical"
+        sql: |
+          -- Tabela conhecimento (fallback Vectorize)
+          CREATE TABLE IF NOT EXISTS conhecimento (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL,
+            conteudo TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+          );
+          CREATE INDEX idx_conhecimento_cliente ON conhecimento(cliente_id);
+          
+          -- Adicionar colunas em clientes
+          ALTER TABLE clientes ADD COLUMN dados_treinamento TEXT;
+          ALTER TABLE clientes ADD COLUMN data_ultimo_treino DATETIME;
+      
+      - task: "Validar estrutura de tabelas existentes"
+        status: "pending"
+        priority: "high"
+        validation: |
+          SELECT name FROM sqlite_master WHERE type='table';
+          SELECT COUNT(*) FROM prospects;
+          SELECT COUNT(*) FROM clientes;
+          SELECT COUNT(*) FROM leads;
+    
+    bindings:
+      - task: "Configurar bindings oconnector-api"
+        status: "pending"
+        priority: "critical"
+        bindings:
+          - type: "D1 Database"
+            var: "DB"
+            value: "oconnector_db"
+          - type: "Workers AI"
+            var: "AI"
+          - type: "Environment Variables"
+            vars: ["GOOGLE_PLACES_KEY", "GOOGLE_API_KEY", etc]
+      
+      - task: "Configurar bindings agent-training-worker"
+        status: "pending"
+        priority: "critical"
+        bindings:
+          - type: "D1 Database"
+            var: "DB"
+            value: "oconnector_db"
+          - type: "Workers AI"
+            var: "AI"
+          - type: "Vectorize (opcional)"
+            var: "VECTORIZE"
+            note: "Sistema funciona sem, usando fallback D1"
+  
+  deployment:
+    workers:
+      - worker: "oconnector-api"
+        steps:
+          - "Verificar código no editor"
+          - "Testar endpoints localmente (se possível)"
+          - "Save and Deploy"
+          - "Verificar URL ativa"
+        
+      - worker: "agent-training-worker"
+        steps:
+          - "Colar código atualizado (agent-training-deploy.md)"
+          - "Verificar bindings configurados"
+          - "Save and Deploy"
+          - "Testar endpoint /api"
+  
+  post_deployment:
+    validation:
+      - task: "Testar oconnector-api"
+        priority: "critical"
+        tests:
+          - endpoint: "GET /api"
+            expected: "success: true, database: 'Conectado'"
+          
+          - endpoint: "GET /api/prospects"
+            expected: "Lista de prospects (pode estar vazia)"
+          
+          - endpoint: "POST /api/prospectar"
+            payload: |
+              {
+                "nicho": "imobiliária",
+                "cidade": "Iguaba Grande"
+              }
+            expected: "Array de prospects encontrados"
+      
+      - task: "Testar agent-training-worker"
+        priority: "critical"
+        tests:
+          - endpoint: "GET /api"
+            expected: "message: 'oConnector Agent Training API v2.0'"
+          
+          - endpoint: "POST /api/train"
+            payload: |
+              {
+                "cliente_id": 1,
+                "nome_empresa": "Imobiliária Teste",
+                "whatsapp": "(22) 99999-9999",
+                "endereco": "Rua Teste, 100",
+                "horario": "Seg-Sex: 8h-18h",
+                "diferenciais": "20 anos no mercado",
+                "corretor_nome": ["Carlos"],
+                "corretor_especialidade": ["Vendas"],
+                "faq_pergunta": ["Vocês trabalham com financiamento?"],
+                "faq_resposta": ["Sim! Temos parceria com bancos."],
+                "tom_voz": "amigavel",
+                "usar_emojis": "moderado"
+              }
+            expected: "success: true, documentos_processados > 0"
+          
+          - endpoint: "POST /api/query"
+            prerequisite: "Cliente 1 treinado"
+            payload: |
+              {
+                "cliente_id": 1,
+                "pergunta": "Vocês trabalham com financiamento?"
+              }
+            expected: "resposta contendo informação sobre financiamento"
+
+# =============================================================================
+# TESTES DE INTEGRAÇÃO END-TO-END
+# =============================================================================
+
+integration_tests:
+  
+  test_1_prospectar_e_salvar:
+    name: "Prospecção de imobiliárias e salvamento no D1"
+    steps:
+      - step: 1
+        action: "POST /api/prospectar"
+        payload: |
+          {
+            "nicho": "imobiliária",
+            "cidade": "Cabo Frio"
+          }
+        validation: "Verificar array de prospects retornado"
+      
+      - step: 2
+        action: "GET /api/prospects"
+        validation: "Verificar se prospects foram salvos no D1"
+      
+      - step: 3
+        action: "Verificar classificação automática"
+        validation: "Prospects devem ter 'perfil' (A/B/C) e 'prioridade' (1-10)"
+  
+  test_2_criar_cliente_e_treinar:
+    name: "Criar cliente e treinar agente personalizado"
+    steps:
+      - step: 1
+        action: "INSERT manual no D1"
+        sql: |
+          INSERT INTO clientes (
+            nome_imobiliaria, 
+            whatsapp_numero, 
+            plano, 
+            valor_mensal, 
+            status
+          ) VALUES (
+            'Imobiliária Silva Teste',
+            '22999999999',
+            'STARTER',
+            500,
+            'ativo'
+          );
+        validation: "SELECT id FROM clientes ORDER BY id DESC LIMIT 1"
+      
+      - step: 2
+        action: "POST /api/train"
+        note: "Usar ID do cliente criado no step 1"
+        payload: "Dados completos do cliente (FAQs, equipe, etc)"
+        validation: "success: true, documentos_processados > 0"
+      
+      - step: 3
+        action: "GET /api/status/:cliente_id"
+        validation: "Verificar dados_treinamento preenchidos"
+  
+  test_3_rag_query:
+    name: "Testar RAG com perguntas contextualizadas"
+    prerequisite: "Cliente treinado (test_2)"
+    steps:
+      - step: 1
+        action: "POST /api/query"
+        payload: |
+          {
+            "cliente_id": <ID_CLIENTE>,
+            "pergunta": "Qual o horário de funcionamento?"
+          }
+        validation: "Resposta deve conter horário do cliente"
+      
+      - step: 2
+        action: "POST /api/query"
+        payload: |
+          {
+            "cliente_id": <ID_CLIENTE>,
+            "pergunta": "Vocês cobram taxa de corretagem?"
+          }
+        validation: "Resposta baseada nos FAQs treinados"
+      
+      - step: 3
+        action: "POST /api/query"
+        payload: |
+          {
+            "cliente_id": <ID_CLIENTE>,
+            "pergunta": "Quem é o corretor?"
+          }
+        validation: "Resposta menciona corretor cadastrado"
+  
+  test_4_multi_tenant_isolation:
+    name: "Validar isolamento multi-tenant"
+    steps:
+      - step: 1
+        action: "Criar cliente 2 com dados diferentes"
+        note: "Repetir test_2 com dados distintos"
+      
+      - step: 2
+        action: "Query para cliente 1"
+        payload: |
+          {
+            "cliente_id": 1,
+            "pergunta": "Qual o nome da empresa?"
+          }
+        validation: "Deve retornar nome do cliente 1"
+      
+      - step: 3
+        action: "Query para cliente 2"
+        payload: |
+          {
+            "cliente_id": 2,
+            "pergunta": "Qual o nome da empresa?"
+          }
+        validation: "Deve retornar nome do cliente 2 (diferente)"
+      
+      - step: 4
+        action: "Verificar isolamento no D1"
+        sql: |
+          SELECT COUNT(*) FROM conhecimento WHERE cliente_id = 1;
+          SELECT COUNT(*) FROM conhecimento WHERE cliente_id = 2;
+        validation: "Ambos devem ter registros separados"
+
+# =============================================================================
+# SCRIPTS DE TESTE (CURL)
+# =============================================================================
+
+test_scripts:
+  
+  script_1_health_check:
+    name: "Verificar saúde dos workers"
+    commands:
+      - name: "oconnector-api"
+        command: |
+          curl -X GET https://oconnector-api.xerifegomes-e71.workers.dev/api
+        expected: |
+          {
+            "success": true,
+            "message": "oConnector API v1.0 - Plataforma de Automação para Negócios Locais",
+            "database": "Conectado",
+            "ai": "Disponível"
+          }
+      
+      - name: "agent-training-worker"
+        command: |
+          curl -X GET https://agent-training-worker.xerifegomes-e71.workers.dev/api
+        expected: |
+          {
+            "success": true,
+            "message": "oConnector Agent Training API v2.0",
+            "vectorize_enabled": false
+          }
+  
+  script_2_prospectar:
+    name: "Prospectar imobiliárias"
+    command: |
+      curl -X POST https://oconnector-api.xerifegomes-e71.workers.dev/api/prospectar \
+        -H "Content-Type: application/json" \
+        -d '{
+          "nicho": "imobiliária",
+          "cidade": "Iguaba Grande"
+        }'
+    expected: |
+      {
+        "success": true,
+        "resultados": [
+          {
+            "nome": "Imobiliária X",
+            "telefone": "...",
+            "perfil": "A",
+            "prioridade": 9
+          }
+        ]
+      }
+  
+  script_3_treinar_agente:
+    name: "Treinar agente completo"
+    command: |
+      curl -X POST https://agent-training-worker.xerifegomes-e71.workers.dev/api/train \
+        -H "Content-Type: application/json" \
+        -d '{
+          "cliente_id": 1,
+          "nome_empresa": "Imobiliária Silva",
+          "whatsapp": "(22) 99999-9999",
+          "endereco": "Rua XV, 100, Iguaba Grande - RJ",
+          "horario": "Seg-Sex: 8h-18h, Sáb: 9h-13h",
+          "diferenciais": "20 anos no mercado. Mais de 500 imóveis vendidos. Atendimento personalizado.",
+          "corretor_nome": ["Carlos Silva", "Ana Santos"],
+          "corretor_especialidade": ["Vendas", "Locação"],
+          "faq_pergunta": [
+            "Vocês trabalham com financiamento?",
+            "Qual a taxa de corretagem?",
+            "Aceita pets nos imóveis?"
+          ],
+          "faq_resposta": [
+            "Sim! Temos parceria com Caixa, Itaú, Bradesco e Santander. Ajudamos em todo o processo.",
+            "Na venda cobramos 6% do valor do imóvel. Na locação, 1 aluguel de taxa.",
+            "Depende do imóvel. Temos várias opções pet-friendly!"
+          ],
+          "tom_voz": "amigavel",
+          "usar_emojis": "moderado"
+        }'
+    expected: |
+      {
+        "success": true,
+        "documentos_processados": 7,
+        "metodo": "D1 Fallback"
+      }
+  
+  script_4_query_rag:
+    name: "Consultar agente treinado"
+    command: |
+      curl -X POST https://agent-training-worker.xerifegomes-e71.workers.dev/api/query \
+        -H "Content-Type: application/json" \
+        -d '{
+          "cliente_id": 1,
+          "pergunta": "Vocês trabalham com financiamento bancário?"
+        }'
+    expected: |
+      {
+        "success": true,
+        "resposta": "Sim! Temos parceria com Caixa, Itaú, Bradesco e Santander...",
+        "contexto_usado": 5,
+        "fontes": ["faq", "info_empresa"]
+      }
+
+# =============================================================================
+# MONITORAMENTO E LOGS
+# =============================================================================
+
+monitoring:
+  
+  cloudflare_analytics:
+    metrics:
+      - "Requests por dia (oconnector-api)"
+      - "Requests por dia (agent-training-worker)"
+      - "Latência média"
+      - "Taxa de erro"
+      - "Workers AI invocations"
+    
+    alerts:
+      - condition: "Taxa de erro > 5%"
+        action: "Notificar via email"
+      
+      - condition: "Latência > 2s"
+        action: "Investigar performance"
+      
+      - condition: "Workers AI quota > 80%"
+        action: "Alertar sobre limites"
+  
+  logs:
+    enable: true
+    retention: "7 dias"
+    critical_events:
+      - "Erro ao prospectar (Google Places API)"
+      - "Falha ao treinar agente"
+      - "Query RAG sem contexto"
+      - "Multi-tenant isolation violation"
+
+# =============================================================================
+# TROUBLESHOOTING COMUM
+# =============================================================================
+
+troubleshooting:
+  
+  issue_1:
+    problem: "REQUEST_DENIED do Google Places API"
+    cause: "API Key inválida ou APIs não habilitadas"
+    solution: |
+      1. Ir para Google Cloud Console
+      2. Verificar APIs habilitadas:
+         - Places API
+         - Places API (New)
+         - Geocoding API
+      3. Regenerar API Key se necessário
+      4. Atualizar variável GOOGLE_PLACES_KEY no worker
+  
+  issue_2:
+    problem: "agent-training-worker retorna 500"
+    cause: "Tabela 'conhecimento' não existe no D1"
+    solution: |
+      1. Ir para D1 console
+      2. Executar SQL:
+         CREATE TABLE conhecimento (...);
+      3. Redeploy worker
+  
+  issue_3:
+    problem: "Query RAG retorna respostas genéricas"
+    cause: "Cliente não foi treinado ou dados insuficientes"
+    solution: |
+      1. Verificar: GET /api/status/:cliente_id
+      2. Se dados_treinamento NULL, treinar novamente
+      3. Adicionar mais FAQs e informações
+  
+  issue_4:
+    problem: "Workers AI timeout"
+    cause: "Model sobrecarregado ou query muito grande"
+    solution: |
+      1. Reduzir max_tokens
+      2. Simplificar contexto
+      3. Implementar cache de respostas comuns
+
+# =============================================================================
+# PRÓXIMOS PASSOS PÓS-DEPLOYMENT
+# =============================================================================
+
+next_steps:
+  
+  immediate:
+    - task: "Dashboard HTML deployment"
+      action: "Upload oconnector-dashboard HTML no Cloudflare Pages"
+      url: "https://oconnector-dashboard.pages.dev"
+      priority: "high"
+    
+    - task: "Testar fluxo completo end-to-end"
+      action: "Executar todos os integration_tests acima"
+      priority: "critical"
+    
+    - task: "Documentar APIs"
+      action: "Criar OpenAPI/Swagger spec"
+      priority: "medium"
+  
+  short_term:
+    - task: "Site institucional oConnector.tech"
+      description: "Landing page de vendas"
+      effort: "4-6 horas"
+      tech: "Next.js ou HTML simples"
+    
+    - task: "Landing page template para clientes"
+      description: "Template HTML personalizável"
+      effort: "4-6 horas"
+      deployment: "Cloudflare Pages (subdomínio por cliente)"
+    
+    - task: "Bot WhatsApp multi-tenant"
+      description: "whatsapp-web.js + integração com agent-training-worker"
+      effort: "12-16 horas"
+      deployment: "VPS (Railway, DigitalOcean, Contabo)"
+  
+  medium_term:
+    - task: "Dashboard do cliente"
+      description: "Painel para cliente ver leads capturados"
+      effort: "8 horas"
+    
+    - task: "Sistema de notificações"
+      description: "Telegram/Email quando lead novo chega"
+      effort: "4 horas"
+    
+    - task: "Vectorize Index"
+      description: "Melhorar RAG com busca vetorial"
+      effort: "1 hora (CLI) + testes"
+      command: "wrangler vectorize create oconnector-knowledge-base --dimensions=768 --metric=cosine"
+
+# =============================================================================
+# DEPLOYMENT FINAL COMMANDS
+# =============================================================================
+
+deployment_commands:
+  
+  cloudflare_cli:
+    setup: |
+      # Instalar Wrangler
+      npm install -g wrangler
+      
+      # Login
+      wrangler login
+    
+    deploy:
+      worker_1: |
+        # oconnector-api já está deployado via dashboard
+        # Se precisar redeploy via CLI:
+        cd oconnector-api
+        wrangler deploy
+      
+      worker_2: |
+        # agent-training-worker já está deployado via dashboard
+        # Se precisar redeploy via CLI:
+        cd agent-training-worker
+        wrangler deploy
+    
+    database: |
+      # Executar SQL no D1
+      wrangler d1 execute oconnector_db --file=schema.sql
+    
+    vectorize: |
+      # Criar índice Vectorize (opcional)
+      wrangler vectorize create oconnector-knowledge-base \
+        --dimensions=768 \
+        --metric=cosine
+
+# =============================================================================
+# SUCCESS CRITERIA
+# =============================================================================
+
+success_criteria:
+  
+  technical:
+    - "✅ Ambos workers retornam 200 no /api"
+    - "✅ Prospecção retorna array de prospects"
+    - "✅ Treinamento salva dados no D1"
+    - "✅ Query RAG retorna respostas contextualizadas"
+    - "✅ Multi-tenant isolamento validado"
+    - "✅ Workers AI responde em < 2s"
+  
+  business:
+    - "✅ Sistema pronto para onboarding de clientes"
+    - "✅ Pode prospectar 20+ imobiliárias por cidade"
+    - "✅ Pode treinar agentes em < 5 minutos"
+    - "✅ Bot pode responder perguntas 24/7"
+    - "✅ Infraestrutura suporta 10+ clientes simultâneos"
+
+# =============================================================================
+# FINAL NOTES
+# =============================================================================
+
+notes: |
+  Este YAML consolida toda a especificação do backend oConnector.
+  
+  ORDEM DE EXECUÇÃO:
+  1. Executar SQLs faltantes no D1
+  2. Verificar bindings em ambos workers
+  3. Testar health check (GET /api)
+  4. Executar integration tests na ordem
+  5. Deploy dashboard HTML
+  6. Partir para frontend/bot WhatsApp
+  
+  IMPORTANTE:
+  - Sistema funciona SEM Vectorize (fallback D1)
+  - Google Places API precisa estar habilitada
+  - Multi-tenancy está implementado via cliente_id
+  - Workers AI tem limites na conta free
+  
+  PRONTO PARA PRODUÇÃO quando:
+  - Todos success_criteria ✅
+  - Integration tests passando
+  - Logs configurados
+  - Monitoring ativo
+

@@ -1,0 +1,10 @@
+name = "d1-setup"
+compatibility_date = "2024-01-01"
+
+account_id = "e71984852bedaf5f21cef5d949948498"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oconnector_db"
+database_id = "33ba528b-382b-46da-bc26-8bb4fbc8d994"
+

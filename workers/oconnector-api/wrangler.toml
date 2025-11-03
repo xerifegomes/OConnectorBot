@@ -1,0 +1,29 @@
+name = "oconnector-api"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+account_id = "e71984852bedaf5f21cef5d949948498"
+
+# Zone ID: ea6add9629baf26c4d974cf4c1953511
+# (Usado apenas para configurações de rotas customizadas/domínio, se necessário)
+
+[env.production]
+name = "oconnector-api"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oconnector_db"
+database_id = "33ba528b-382b-46da-bc26-8bb4fbc8d994"
+
+# Workers AI (automatic binding)
+# Não precisa configurar aqui, é automático
+
+# Variáveis de ambiente (configure no dashboard ou aqui)
+[vars]
+# GOOGLE_PLACES_KEY = "..."
+# GOOGLE_API_KEY = "..."
+# GOOGLE_OAUTH_CLIENT_ID = "..."
+# GOOGLE_OAUTH_CLIENT_SECRET = "..."
+# GOOGLE_SHEETS_ID = "..."
+WHATSAPP_BOT_SERVER_URL = "https://6635dafb02a9.ngrok-free.app"
+

@@ -1,0 +1,9 @@
+name = "oconnector"
+compatibility_date = "2024-01-01"
+account_id = "e71984852bedaf5f21cef5d949948498"
+
+main = "index.js"
+
+[site]
+bucket = "../../oconnector-frontend/out"
+

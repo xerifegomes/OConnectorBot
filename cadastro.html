@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Crie sua conta no oConnector">
+    <title>Cadastro - oConnector</title>
+    <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card auth-card-large">
+            <div class="auth-header">
+                <h1 class="logo-text">oConnector</h1>
+                <h2>Criar conta</h2>
+                <p>Preencha os dados abaixo para começar</p>
+            </div>
+
+            <form id="registerForm" class="auth-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="nome">Nome Completo</label>
+                        <input 
+                            type="text" 
+                            id="nome" 
+                            name="nome" 
+                            placeholder="Seu nome completo" 
+                            required
+                            aria-required="true"
+                        >
+                        <span class="error-message" id="nomeError"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input 
+                            type="email" 
+                            id="email" 
+                            name="email" 
+                            placeholder="seu@email.com" 
+                            required
+                            autocomplete="email"
+                            aria-required="true"
+                        >
+                        <span class="error-message" id="emailError"></span>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="whatsapp">WhatsApp</label>
+                        <input 
+                            type="tel" 
+                            id="whatsapp" 
+                            name="whatsapp" 
+                            placeholder="(00) 00000-0000" 
+                            required
+                            autocomplete="tel"
+                            aria-required="true"
+                        >
+                        <span class="error-message" id="whatsappError"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="empresa">Nome da Empresa</label>
+                        <input 
+                            type="text" 
+                            id="empresa" 
+                            name="empresa" 
+                            placeholder="Nome da sua empresa" 
+                            required
+                            aria-required="true"
+                        >
+                        <span class="error-message" id="empresaError"></span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="nicho">Nicho de Atuação</label>
+                    <select 
+                        id="nicho" 
+                        name="nicho" 
+                        required
+                        aria-required="true"
+                    >
+                        <option value="">Selecione um nicho</option>
+                        <option value="Imobiliária">Imobiliária</option>
+                        <option value="Clínica/Consultório">Clínica/Consultório</option>
+                        <option value="Salão de Beleza/Estética">Salão de Beleza/Estética</option>
+                        <option value="Restaurante">Restaurante</option>
+                        <option value="Academia">Academia</option>
+                        <option value="Outro">Outro</option>
+                    </select>
+                    <span class="error-message" id="nichoError"></span>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="senha">Senha</label>
+                        <input 
+                            type="password" 
+                            id="senha" 
+                            name="senha" 
+                            placeholder="Mínimo 8 caracteres" 
+                            required
+                            minlength="8"
+                            autocomplete="new-password"
+                            aria-required="true"
+                        >
+                        <span class="error-message" id="senhaError"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirmarSenha">Confirmar Senha</label>
+                        <input 
+                            type="password" 
+                            id="confirmarSenha" 
+                            name="confirmarSenha" 
+                            placeholder="Digite a senha novamente" 
+                            required
+                            minlength="8"
+                            autocomplete="new-password"
+                            aria-required="true"
+                        >
+                        <span class="error-message" id="confirmarSenhaError"></span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="plano">Plano</label>
+                    <select 
+                        id="plano" 
+                        name="plano" 
+                        required
+                        aria-required="true"
+                    >
+                        <option value="STARTER">Starter - R$ 2.500 + R$ 500/mês</option>
+                        <option value="PROFESSIONAL">Professional - R$ 4.500 + R$ 600/mês</option>
+                        <option value="PREMIUM">Premium - R$ 7.500 + R$ 900/mês</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+                    <span class="btn-text">Criar Conta</span>
+                    <span class="btn-loading" style="display: none;">Criando conta...</span>
+                </button>
+
+                <div class="auth-error" id="formError" style="display: none;"></div>
+            </form>
+
+            <div class="auth-footer">
+                <p>Já tem uma conta? <a href="/login.html">Fazer login</a></p>
+                <p><a href="/index.html">← Voltar para o site</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        // Verificar se já está autenticado
+        if (auth.isAuthenticated()) {
+            window.location.href = '/dashboard.html';
+        }
+
+        // Máscara para WhatsApp
+        document.getElementById('whatsapp').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length <= 11) {
+                if (value.length <= 2) {
+                    value = value;
+                } else if (value.length <= 7) {
+                    value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
+                } else {
+                    value = `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
+                }
+                e.target.value = value;
+            }
+        });
+
+        // Verificar plano na URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const plano = urlParams.get('plano');
+        if (plano) {
+            const planoMap = {
+                'starter': 'STARTER',
+                'professional': 'PROFESSIONAL',
+                'premium': 'PREMIUM'
+            };
+            if (planoMap[plano.toLowerCase()]) {
+                document.getElementById('plano').value = planoMap[plano.toLowerCase()];
+            }
+        }
+
+        // Validação de senha
+        document.getElementById('confirmarSenha').addEventListener('blur', function() {
+            const senha = document.getElementById('senha').value;
+            const confirmarSenha = this.value;
+            const errorEl = document.getElementById('confirmarSenhaError');
+            
+            if (senha !== confirmarSenha) {
+                errorEl.textContent = 'As senhas não coincidem';
+            } else {
+                errorEl.textContent = '';
+            }
+        });
+
+        // Inicializar formulário de cadastro
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                nome: document.getElementById('nome').value,
+                email: document.getElementById('email').value,
+                whatsapp: document.getElementById('whatsapp').value.replace(/\D/g, ''),
+                empresa: document.getElementById('empresa').value,
+                nicho: document.getElementById('nicho').value,
+                senha: document.getElementById('senha').value,
+                plano: document.getElementById('plano').value
+            };
+
+            const confirmarSenha = document.getElementById('confirmarSenha').value;
+            const formError = document.getElementById('formError');
+
+            // Limpar erros
+            formError.style.display = 'none';
+            document.querySelectorAll('.error-message').forEach(el => el.textContent = '');
+
+            // Validar senhas
+            if (formData.senha !== confirmarSenha) {
+                document.getElementById('confirmarSenhaError').textContent = 'As senhas não coincidem';
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnLoading = submitBtn.querySelector('.btn-loading');
+
+            // Mostrar loading
+            submitBtn.disabled = true;
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'inline';
+
+            try {
+                const result = await auth.register(formData);
+                
+                if (result.success) {
+                    window.location.href = '/dashboard.html';
+                } else {
+                    formError.textContent = result.message || 'Erro ao criar conta';
+                    formError.style.display = 'block';
+                    
+                    // Mostrar erros específicos se existirem
+                    if (result.errors) {
+                        Object.keys(result.errors).forEach(field => {
+                            const errorEl = document.getElementById(field + 'Error');
+                            if (errorEl) {
+                                errorEl.textContent = result.errors[field];
+                            }
+                        });
+                    }
+                }
+            } catch (error) {
+                formError.textContent = 'Erro ao conectar com o servidor. Tente novamente.';
+                formError.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                btnText.style.display = 'inline';
+                btnLoading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
+

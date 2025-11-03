@@ -1,0 +1,32 @@
+{
+  "name": "oconnector-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp integrado com oConnector - Agente IA especializado",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "server": "node src/bot-server.js",
+    "dev:server": "nodemon src/bot-server.js",
+    "test": "node src/test.js",
+    "start:local": "./start-local.sh"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "ai",
+    "oconnector"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
