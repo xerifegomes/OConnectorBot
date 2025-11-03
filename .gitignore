@@ -24,6 +24,15 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.cloudflare
+
+# Security files with secrets
+*secret*
+*password*
+*token*
+*api-key*
+checklist-seguranca.md
+AUDITORIA_COMPLETA_REPORT.md
 
 # Vercel
 .vercel
