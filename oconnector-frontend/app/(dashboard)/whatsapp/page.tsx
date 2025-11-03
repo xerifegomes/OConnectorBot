@@ -269,50 +269,84 @@ export default function WhatsAppPage() {
   };
 
   const loadConversations = async () => {
+    // Inicializar sempre com array vazio para evitar erro
+    setConversations([]);
+    
     try {
       const response = await api.getWhatsAppConversations();
+      
       // Debug: verificar estrutura da resposta
       console.log("Response loadConversations:", response);
+      console.log("Response type:", typeof response);
+      console.log("Response.data:", response?.data);
+      console.log("Is array?", Array.isArray(response?.data));
       
-      // Verificar se response existe e tem data
+      // Verificar se response existe
       if (!response) {
         console.warn("Response vazio em loadConversations");
-        setConversations([]);
         return;
       }
       
-      // Se não for sucesso, retornar array vazio
+      // Se não for sucesso, retornar array vazio (já definido acima)
       if (!response.success) {
         console.warn("Response não sucesso:", response.error || response.message);
-        setConversations([]);
         return;
       }
       
-      // Garantir que data existe e é um array
-      if (!response.data) {
-        console.warn("Response.data não existe");
-        setConversations([]);
+      // Garantir que data existe
+      if (response.data === undefined || response.data === null) {
+        console.warn("Response.data não existe ou é null");
         return;
       }
       
-      // Converter para array se necessário
+      // Converter para array - TRATAMENTO ROBUSTO
       let conversationsData: any[] = [];
+      
       if (Array.isArray(response.data)) {
+        // Se já é array, usar diretamente
         conversationsData = response.data;
       } else if (typeof response.data === 'object') {
-        // Se for objeto, tentar extrair array ou usar como array vazio
-        console.warn("Response.data não é array, é objeto:", response.data);
+        // Se for objeto, tentar extrair array de propriedades comuns
+        if (Array.isArray(response.data.conversations)) {
+          conversationsData = response.data.conversations;
+        } else if (Array.isArray(response.data.data)) {
+          conversationsData = response.data.data;
+        } else if (Array.isArray(response.data.items)) {
+          conversationsData = response.data.items;
+        } else {
+          // Se não encontrar array, usar array vazio
+          console.warn("Response.data não é array, é objeto sem propriedades array:", response.data);
+          conversationsData = [];
+        }
+      } else {
+        // Se não for array nem objeto, usar array vazio
+        console.warn("Response.data não é array nem objeto:", typeof response.data, response.data);
         conversationsData = [];
       }
       
-      setConversations(conversationsData.map((conv: any) => ({
-        id: conv.id || conv.contact || `conv-${Date.now()}`,
-        contact: conv.contact || '',
-        contactName: conv.contactName || conv.contact || 'Sem nome',
-        lastMessage: conv.lastMessage || 'Sem mensagens',
-        lastMessageTime: conv.lastMessageTime ? new Date(conv.lastMessageTime) : new Date(),
-        unread: conv.unread || 0,
-      })));
+      // Mapear conversas - SÓ SE conversationsData for array válido
+      if (Array.isArray(conversationsData)) {
+        const mappedConversations = conversationsData.map((conv: any, index: number) => {
+          try {
+            return {
+              id: conv.id || conv.contact || `conv-${index}-${Date.now()}`,
+              contact: conv.contact || '',
+              contactName: conv.contactName || conv.contact || 'Sem nome',
+              lastMessage: conv.lastMessage || 'Sem mensagens',
+              lastMessageTime: conv.lastMessageTime ? new Date(conv.lastMessageTime) : new Date(),
+              unread: conv.unread || 0,
+            };
+          } catch (mapError) {
+            console.error("Erro ao mapear conversa:", mapError, conv);
+            return null;
+          }
+        }).filter((conv: any) => conv !== null); // Remover conversas com erro
+        
+        setConversations(mappedConversations);
+      } else {
+        console.error("conversationsData não é array após processamento:", conversationsData);
+        setConversations([]);
+      }
     } catch (error) {
       console.error("Erro ao carregar conversas:", error);
       setConversations([]); // Garantir que sempre é array vazio em caso de erro
