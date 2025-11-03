@@ -348,21 +348,23 @@ export default function WhatsAppPage() {
       
       // Mapear conversas - SÓ SE conversationsData for array válido
       if (Array.isArray(conversationsData)) {
-        const mappedConversations = conversationsData.map((conv: any, index: number) => {
-          try {
-            return {
-              id: conv.id || conv.contact || `conv-${index}-${Date.now()}`,
-              contact: conv.contact || '',
-              contactName: conv.contactName || conv.contact || 'Sem nome',
-              lastMessage: conv.lastMessage || 'Sem mensagens',
-              lastMessageTime: conv.lastMessageTime ? new Date(conv.lastMessageTime) : new Date(),
-              unread: conv.unread || 0,
-            };
-          } catch (mapError) {
-            console.error("Erro ao mapear conversa:", mapError, conv);
-            return null;
-          }
-        }).filter((conv: any) => conv !== null); // Remover conversas com erro
+        const mappedConversations: Conversation[] = conversationsData
+          .map((conv: any, index: number) => {
+            try {
+              return {
+                id: conv.id || conv.contact || `conv-${index}-${Date.now()}`,
+                contact: conv.contact || '',
+                contactName: conv.contactName || conv.contact || 'Sem nome',
+                lastMessage: conv.lastMessage || 'Sem mensagens',
+                lastMessageTime: conv.lastMessageTime ? new Date(conv.lastMessageTime) : new Date(),
+                unread: conv.unread || 0,
+              };
+            } catch (mapError) {
+              console.error("Erro ao mapear conversa:", mapError, conv);
+              return null;
+            }
+          })
+          .filter((conv): conv is Conversation => conv !== null); // Type guard para remover nulls
         
         setConversations(mappedConversations);
       } else {
