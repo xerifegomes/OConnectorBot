@@ -65,8 +65,10 @@ O build gerará uma pasta `out/` com todos os arquivos estáticos.
 
 Após o deploy, o frontend estará disponível em:
 ```
-https://oconnector-frontend.pages.dev
+https://oconnector.xerifegomes-e71.workers.dev
 ```
+
+**✅ Frontend conectado ao GitHub para deploy automático**
 
 Ou, se configurar domínio customizado:
 ```

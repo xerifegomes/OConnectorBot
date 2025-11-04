@@ -11,12 +11,22 @@ const app = express();
 
 // CORS - Permitir requisições do frontend
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Permitir todas as origens (desenvolvimento)
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'false');
+  res.header('Access-Control-Max-Age', '86400'); // 24 horas
+  
+  // Responder a preflight requests
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
   
   next();
@@ -61,12 +71,22 @@ async function initializeBot() {
     },
   });
 
-  await botInstance.initialize();
+  try {
+    await botInstance.initialize();
+    console.log('✅ Bot inicializado com sucesso');
+  } catch (error) {
+    console.error('❌ Erro ao inicializar bot:', error);
+    botStatus = 'disconnected';
+    throw error;
+  }
   return botInstance;
 }
 
 // Inicializar bot ao iniciar servidor
-initializeBot().catch(console.error);
+initializeBot().catch((error) => {
+  console.error('❌ Erro fatal ao inicializar bot:', error);
+  botStatus = 'disconnected';
+});
 
 /**
  * GET /status
@@ -140,6 +160,86 @@ app.get('/info', (req, res) => {
     agentAPI: process.env.AGENT_TRAINING_API_URL,
     oconnectorAPI: process.env.OCONNECTOR_API_URL,
   });
+});
+
+/**
+ * GET /conversations
+ * Obter conversas do WhatsApp
+ */
+app.get('/conversations', async (req, res) => {
+  try {
+    if (!botInstance || !botInstance.isReady) {
+      return res.json({
+        success: true,
+        data: [],
+      });
+    }
+
+    const conversations = await botInstance.getConversations();
+    res.json({
+      success: true,
+      data: conversations,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /messages/:contact
+ * Obter mensagens de uma conversa
+ */
+app.get('/messages/:contact', async (req, res) => {
+  try {
+    const { contact } = req.params;
+    
+    if (!botInstance || !botInstance.isReady) {
+      return res.json({
+        success: true,
+        data: [],
+      });
+    }
+
+    const messages = await botInstance.getMessages(contact);
+    res.json({
+      success: true,
+      data: messages,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /sync
+ * Forçar sincronização de conversas
+ */
+app.post('/sync', async (req, res) => {
+  try {
+    if (!botInstance || !botInstance.isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'Bot não está conectado',
+      });
+    }
+
+    await botInstance.syncConversations();
+    res.json({
+      success: true,
+      message: 'Conversas sincronizadas',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
 const PORT = process.env.PORT || 3001;

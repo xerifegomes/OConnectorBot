@@ -1,0 +1,33 @@
+{
+  "cliente_id": 1,
+  "nome_empresa": "Sua Empresa de Tecnologia",
+  "whatsapp": "21999999999",
+  "endereco": "Rua Exemplo, 123 - Rio de Janeiro - RJ",
+  "horario": "Seg-Sex: 9h-18h, Sáb: 10h-14h",
+  "diferenciais": "Especialistas em desenvolvimento de software. Mais de 10 anos de experiência. Soluções personalizadas para cada cliente.",
+  "corretor_nome": [
+    "João Silva",
+    "Maria Santos"
+  ],
+  "corretor_especialidade": [
+    "Desenvolvimento Full Stack",
+    "Consultoria em TI"
+  ],
+  "faq_pergunta": [
+    "Quais serviços vocês oferecem?",
+    "Qual o prazo de entrega de um projeto?",
+    "Vocês trabalham com desenvolvimento web?",
+    "Qual o valor de um projeto?",
+    "Oferecem suporte técnico?"
+  ],
+  "faq_resposta": [
+    "Oferecemos desenvolvimento de software, consultoria em TI, desenvolvimento web, mobile e soluções personalizadas para empresas.",
+    "O prazo varia conforme a complexidade do projeto. Geralmente entre 2 a 6 meses para projetos completos. Fazemos orçamento personalizado.",
+    "Sim! Desenvolvemos sites, sistemas web, e-commerces e aplicações web modernas usando as melhores tecnologias do mercado.",
+    "O valor depende do escopo do projeto. Fazemos orçamento personalizado sem compromisso. Entre em contato para uma avaliação.",
+    "Sim! Oferecemos suporte técnico completo durante e após o desenvolvimento. Temos diferentes planos de suporte disponíveis."
+  ],
+  "tom_voz": "amigavel",
+  "usar_emojis": "moderado"
+}
+

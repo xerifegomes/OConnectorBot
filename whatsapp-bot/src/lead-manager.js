@@ -23,10 +23,13 @@ export class LeadManager {
         return cached.leadId;
       }
 
+      // Usar API key do bot para autenticação
+      const botApiKey = process.env.BOT_API_KEY || 'oconnector-bot-internal';
       const response = await fetch(`${this.apiUrl}/api/leads`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `X-API-Key ${botApiKey}`
         },
         body: JSON.stringify({
           cliente_id: clienteId,
@@ -79,7 +82,13 @@ export class LeadManager {
    */
   async leadExists(clienteId, telefone) {
     try {
-      const response = await fetch(`${this.apiUrl}/api/leads?cliente_id=${clienteId}&telefone=${telefone}`);
+      // Usar API key do bot para autenticação
+      const botApiKey = process.env.BOT_API_KEY || 'oconnector-bot-internal';
+      const response = await fetch(`${this.apiUrl}/api/leads?cliente_id=${clienteId}&telefone=${telefone}`, {
+        headers: {
+          'Authorization': `X-API-Key ${botApiKey}`
+        }
+      });
       
       if (!response.ok) {
         return false;

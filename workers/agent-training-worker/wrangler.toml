@@ -1,0 +1,17 @@
+name = "agent-training-worker"
+main = "index.js"
+compatibility_date = "2025-11-04"
+
+account_id = "e71984852bedaf5f21cef5d949948498"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oconnector_db"
+database_id = "33ba528b-382b-46da-bc26-8bb4fbc8d994"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "oconnector-knowledge"
+
+# Workers AI é automatico, não precisa configurar binding
+

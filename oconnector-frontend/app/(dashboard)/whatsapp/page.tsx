@@ -33,15 +33,19 @@ export default function WhatsAppPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<"connected" | "disconnected" | "connecting" | "waiting_qr">("disconnected");
+  const [status, setStatus] = useState<"connected" | "disconnected" | "connecting" | "waiting_qr" | "ready">("disconnected");
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [botInfo, setBotInfo] = useState<{ whatsappNumber?: string; name?: string } | null>(null);
   const [agentStatus, setAgentStatus] = useState<{ ready: boolean; trained: boolean } | null>(null);
   const [botServerConnected, setBotServerConnected] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const qrPollInterval = useRef<NodeJS.Timeout | null>(null);
+  const restartInProgress = useRef<boolean>(false);
+  const lastRestartTime = useRef<number>(0);
+  const failedBotServerAttempts = useRef<number>(0);
   
   // URL do bot server local (apenas em desenvolvimento)
   // Em produção, usar sempre API do Cloudflare
@@ -54,10 +58,6 @@ export default function WhatsAppPage() {
   useEffect(() => {
     loadConversations();
     checkBotStatus();
-    // Só tentar bot server local em desenvolvimento
-    if (isDevelopment && BOT_SERVER_URL) {
-      checkBotServerConnection();
-    }
     checkAgentStatus();
     startQRPolling();
     
@@ -83,17 +83,32 @@ export default function WhatsAppPage() {
   };
 
   const startQRPolling = () => {
-    // Polling para verificar QR Code e status
+    // Limpar polling anterior se existir
+    if (qrPollInterval.current) {
+      clearInterval(qrPollInterval.current);
+    }
+    
+    // Polling para verificar QR Code e status (usando apenas API Cloudflare)
     qrPollInterval.current = setInterval(async () => {
-      await checkBotStatus();
-      // Só tentar bot server local em desenvolvimento
-      if (isDevelopment && BOT_SERVER_URL) {
-        await checkBotServerConnection();
+      const currentStatus = status;
+      
+      // Parar polling se já estiver conectado
+      if (currentStatus === "connected" || currentStatus === "ready") {
+        if (qrPollInterval.current) {
+          clearInterval(qrPollInterval.current);
+          qrPollInterval.current = null;
+        }
+        return;
       }
-      if (status === "waiting_qr" && !qrCode) {
+      
+      // Verificar status via API Cloudflare
+      await checkBotStatus();
+      
+      // Carregar QR Code se necessário
+      if (currentStatus === "waiting_qr" && !qrCode && !showQRDialog) {
         await loadQRCode();
       }
-    }, 3000); // A cada 3 segundos
+    }, 5000); // 5 segundos
   };
 
   const checkBotServerConnection = async () => {
@@ -103,20 +118,39 @@ export default function WhatsAppPage() {
       return;
     }
     
+    // Se já está conectado, não tentar novamente
+    if (botServerConnected && status === 'connected') {
+      return;
+    }
+    
     try {
-      // Tentar conectar direto ao bot server local
+      // Tentar conectar direto ao bot server local com timeout curto
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1000); // 1 segundo timeout
+      
       const response = await fetch(`${BOT_SERVER_URL}/status`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+        credentials: 'omit',
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
       
-      if (response.ok) {
+      if (response && response.ok) {
         const data = await response.json();
         setBotServerConnected(true);
+        failedBotServerAttempts.current = 0; // Reset contador
         
         // Atualizar status do bot
         if (data.status) {
-          setStatus(data.status as typeof status);
+          const newStatus = data.status as typeof status;
+          setStatus(newStatus);
+          // Atualizar agent status quando bot conectar
+          if (newStatus === 'connected') {
+            checkAgentStatus(newStatus);
+          }
         }
         if (data.qr && data.status === 'waiting_qr') {
           setQrCode(data.qr);
@@ -129,30 +163,52 @@ export default function WhatsAppPage() {
         }
       } else {
         setBotServerConnected(false);
+        failedBotServerAttempts.current++;
       }
-    } catch (error) {
-      // Silenciosamente ignorar erro em produção
+    } catch (error: any) {
+      // Silenciosamente ignorar erro - não logar no console
       setBotServerConnected(false);
-      // Se falhar, tentar via API do Cloudflare apenas em desenvolvimento
-      if (isDevelopment) {
-        await checkBotStatus();
+      failedBotServerAttempts.current++;
+      
+      // Após 3 falhas, parar de tentar bot server local
+      if (failedBotServerAttempts.current >= 3) {
+        // console.log('Bot server local indisponível, usando apenas API Cloudflare');
       }
     }
   };
 
-  const checkAgentStatus = async () => {
+  const checkAgentStatus = async (currentBotStatus?: string) => {
     try {
       // Verificar status do agent IA via API
       const response = await api.getWhatsAppBotStatus();
       if (response.success && response.data) {
         const data = response.data as any;
+        // Se o bot está conectado, o agent está ativo (mesmo que não tenha treinamento)
+        const botConnected = currentBotStatus || status;
+        const isReady = data.ready || data.status === 'connected' || botConnected === 'connected';
         setAgentStatus({
-          ready: data.ready || false,
+          ready: isReady,
           trained: data.info?.trained || false,
         });
+      } else {
+        // Se não conseguir obter status, verificar pelo status local do bot
+        const botConnected = currentBotStatus || status;
+        if (botConnected === 'connected') {
+          setAgentStatus({
+            ready: true,
+            trained: false,
+          });
+        }
       }
     } catch (error) {
-      console.error("Erro ao verificar status do agent:", error);
+      // Em caso de erro, verificar pelo status local do bot
+      const botConnected = currentBotStatus || status;
+      if (botConnected === 'connected') {
+        setAgentStatus({
+          ready: true,
+          trained: false,
+        });
+      }
     }
   };
 
@@ -161,17 +217,29 @@ export default function WhatsAppPage() {
       const response = await api.getWhatsAppStatus();
       if (response.success && response.data) {
         const statusData = response.data as any;
-        const newStatus = statusData.status as "connected" | "disconnected" | "connecting" | "waiting_qr";
-        setStatus(newStatus);
+        const newStatus = statusData.status as "connected" | "disconnected" | "connecting" | "waiting_qr" | "ready";
         
-        // Se status mudou para waiting_qr, buscar QR Code
-        if (newStatus === "waiting_qr" && !qrCode) {
-          await loadQRCode();
-        } else if (newStatus === "connected") {
+        // Só atualizar status se mudou
+        if (newStatus !== status) {
+          setStatus(newStatus);
+          
+          // Parar polling se conectado
+          if (newStatus === "connected" || newStatus === "ready") {
+            if (qrPollInterval.current) {
+              clearInterval(qrPollInterval.current);
+              qrPollInterval.current = null;
+            }
+          }
+        }
+        
+        // Não carregar QR Code aqui - deixar o polling fazer isso
+        if (newStatus === "connected" || newStatus === "ready") {
           setQrCode(null);
           setShowQRDialog(false);
           // Carregar informações do bot
           await loadBotInfo();
+          // Atualizar status do agent quando bot conectar
+          await checkAgentStatus(newStatus);
         }
       }
     } catch (error) {
@@ -180,28 +248,13 @@ export default function WhatsAppPage() {
   };
 
   const loadQRCode = async () => {
+    // Evitar carregar QR Code se já tiver um ou se já estiver mostrando
+    if (qrCode || showQRDialog) {
+      return;
+    }
+
     try {
-      // Tentar primeiro do bot server local (apenas em desenvolvimento)
-      if (isDevelopment && BOT_SERVER_URL) {
-        try {
-          const botResponse = await fetch(`${BOT_SERVER_URL}/qr`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (botResponse.ok) {
-            const botData = await botResponse.json();
-            if (botData.qr) {
-              setQrCode(botData.qr);
-              setShowQRDialog(true);
-              return;
-            }
-          }
-        } catch (e) {
-          // Silenciosamente ignorar e tentar via API
-        }
-      }
-      
-      // Fallback: via API do Cloudflare
+      // Usar apenas API do Cloudflare (sem tentar bot local)
       const response = await api.getWhatsAppQR();
       if (response.success && response.data?.qr) {
         setQrCode(response.data.qr);
@@ -225,73 +278,153 @@ export default function WhatsAppPage() {
   };
 
   const handleConnect = async () => {
+    // Evitar múltiplas chamadas simultâneas
+    if (restartInProgress.current) {
+      console.log("Connect já em andamento, ignorando chamada duplicada");
+      return;
+    }
+
+    // Debounce: evitar chamadas muito frequentes
+    const now = Date.now();
+    if (now - lastRestartTime.current < 5000) {
+      console.log("Connect muito recente, aguardando...");
+      return;
+    }
+
+    restartInProgress.current = true;
+    lastRestartTime.current = now;
     setStatus("connecting");
     
-    // Tentar reiniciar via bot server local primeiro (apenas em desenvolvimento)
-    if (isDevelopment && BOT_SERVER_URL) {
+    try {
+      // Tentar reiniciar via bot server local primeiro (apenas em desenvolvimento)
+      if (isDevelopment && BOT_SERVER_URL) {
+        try {
+          const response = await fetch(`${BOT_SERVER_URL}/restart`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          
+          if (response.ok) {
+            setTimeout(() => {
+              checkBotServerConnection();
+              loadQRCode();
+            }, 2000);
+            setShowQRDialog(true);
+            // Liberar lock após delay
+            setTimeout(() => {
+              restartInProgress.current = false;
+            }, 3000);
+            return;
+          }
+        } catch (e) {
+          console.error("Erro ao conectar via bot server local:", e);
+          // Continuar para tentar via API
+        }
+      }
+      
+      // Fallback: via API do Cloudflare
       try {
-        const response = await fetch(`${BOT_SERVER_URL}/restart`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
+        const response = await api.restartWhatsAppBot();
         
-        if (response.ok) {
+        // Se a resposta indicar erro, tratar graciosamente
+        if (response && !response.success) {
+          console.warn("⚠️ Não foi possível conectar via API:", response.message || response.error);
+          // Não mostrar alerta para erro esperado
+        } else {
+          // Sucesso: atualizar status após delay
           setTimeout(() => {
-            checkBotServerConnection();
+            checkBotStatus();
             loadQRCode();
           }, 2000);
-          return;
         }
-      } catch (e) {
-        // Silenciosamente ignorar e tentar via API
+      } catch (error) {
+        console.error("Erro ao reiniciar bot:", error);
+        // Não mostrar alerta genérico
       }
-    }
-    
-    // Fallback: via API do Cloudflare
-    try {
-      await api.restartWhatsAppBot();
+      
+      await loadQRCode();
+      setShowQRDialog(true);
+    } finally {
+      // Sempre liberar o lock após um delay mínimo
       setTimeout(() => {
-        checkBotStatus();
-        loadQRCode();
-      }, 2000);
-    } catch (error) {
-      console.error("Erro ao reiniciar bot:", error);
+        restartInProgress.current = false;
+      }, 3000);
     }
-    
-    await loadQRCode();
-    setShowQRDialog(true);
   };
 
   const handleRestart = async () => {
+    // Evitar múltiplas chamadas simultâneas
+    if (restartInProgress.current) {
+      console.log("Restart já em andamento, ignorando chamada duplicada");
+      return;
+    }
+
+    // Debounce: evitar chamadas muito frequentes (mínimo 5 segundos entre chamadas)
+    const now = Date.now();
+    if (now - lastRestartTime.current < 5000) {
+      console.log("Restart muito recente, aguardando...");
+      return;
+    }
+
+    restartInProgress.current = true;
+    lastRestartTime.current = now;
     setStatus("connecting");
     setQrCode(null);
     
     try {
-      // Tentar via bot server local
-      const response = await fetch(`${BOT_SERVER_URL}/restart`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      if (response.ok) {
-        setTimeout(() => {
-          checkBotServerConnection();
-          loadQRCode();
-        }, 2000);
-        return;
+      // Tentar via bot server local apenas em desenvolvimento
+      if (isDevelopment && BOT_SERVER_URL) {
+        try {
+          const response = await fetch(`${BOT_SERVER_URL}/restart`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          
+          if (response.ok) {
+            setTimeout(() => {
+              checkBotServerConnection();
+              loadQRCode();
+            }, 2000);
+            // Liberar lock após delay
+            setTimeout(() => {
+              restartInProgress.current = false;
+            }, 3000);
+            return;
+          }
+        } catch (e) {
+          console.error("Erro ao reiniciar via bot server local:", e);
+          // Continuar para tentar via API
+        }
       }
-    } catch (e) {
-      // Fallback: via API
-    }
-    
-    try {
-      await api.restartWhatsAppBot();
+      
+      // Fallback: via API do Cloudflare
+      try {
+        const response = await api.restartWhatsAppBot();
+        
+        // Se a resposta indicar erro (mas não lançar exceção), tratar graciosamente
+        if (response && !response.success) {
+          console.warn("⚠️ Não foi possível reiniciar via API:", response.message || response.error);
+          // Não mostrar alerta para erro esperado (bot server offline)
+          if (response.message && response.message.includes('offline')) {
+            console.info("💡 O bot server está offline. Para reiniciar localmente: cd whatsapp-bot && npm start");
+          }
+        } else {
+          // Sucesso: atualizar status após delay
+          setTimeout(() => {
+            checkBotStatus();
+            loadQRCode();
+          }, 2000);
+        }
+      } catch (error) {
+        console.error("Erro ao reiniciar bot:", error);
+        // Não mostrar alerta genérico - apenas logar o erro
+        // O usuário já vê o status no componente
+      }
+    } finally {
+      // Sempre liberar o lock após um delay mínimo
       setTimeout(() => {
-        checkBotStatus();
-        loadQRCode();
-      }, 2000);
-    } catch (error) {
-      console.error("Erro ao reiniciar bot:", error);
+        restartInProgress.current = false;
+      }, 3000);
     }
   };
 
@@ -459,20 +592,22 @@ export default function WhatsAppPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {/* Status do Bot Server */}
-          <div className="flex items-center gap-2">
-            {botServerConnected ? (
-              <Badge variant="outline" className="gap-1">
-                <Wifi className="h-3 w-3 text-green-500" />
-                Bot Server
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="gap-1">
-                <WifiOff className="h-3 w-3 text-red-500" />
-                Bot Offline
-              </Badge>
-            )}
-          </div>
+          {/* Status do Bot Server (apenas em desenvolvimento) */}
+          {isDevelopment && (
+            <div className="flex items-center gap-2">
+              {botServerConnected ? (
+                <Badge variant="outline" className="gap-1">
+                  <Wifi className="h-3 w-3 text-green-500" />
+                  Bot Server
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1">
+                  <WifiOff className="h-3 w-3 text-red-500" />
+                  Bot Offline
+                </Badge>
+              )}
+            </div>
+          )}
           
           {/* Status do Agent IA */}
           {agentStatus && (
@@ -490,9 +625,55 @@ export default function WhatsAppPage() {
             </Button>
           )}
           {status === "connected" && (
-            <Button onClick={handleRestart} variant="outline" size="sm">
-              Reconectar
-            </Button>
+            <>
+              <Button 
+                onClick={async () => {
+                  if (syncing) return;
+                  setSyncing(true);
+                  try {
+                    const response = await api.syncWhatsAppConversations();
+                    if (response?.success) {
+                      await loadConversations();
+                      // Mostrar feedback visual ao invés de alert
+                      console.log('✅ Conversas sincronizadas com sucesso!');
+                    } else {
+                      console.error('Erro ao sincronizar:', response);
+                    }
+                  } catch (error) {
+                    console.error('Erro ao sincronizar:', error);
+                  } finally {
+                    setSyncing(false);
+                  }
+                }} 
+                variant="outline" 
+                size="sm"
+                disabled={syncing || restartInProgress.current}
+              >
+                {syncing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sincronizando...
+                  </>
+                ) : (
+                  'Sincronizar'
+                )}
+              </Button>
+              <Button 
+                onClick={handleRestart} 
+                variant="outline" 
+                size="sm"
+                disabled={syncing || restartInProgress.current}
+              >
+                {restartInProgress.current ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Reconectando...
+                  </>
+                ) : (
+                  'Reconectar'
+                )}
+              </Button>
+            </>
           )}
           {status === "waiting_qr" && (
             <Button onClick={handleConnect} variant="outline" size="sm">
@@ -570,10 +751,10 @@ export default function WhatsAppPage() {
                     Atualizar QR Code
                   </Button>
                 </div>
-                {!botServerConnected && (
+                {isDevelopment && !botServerConnected && (
                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-400">
                     <AlertCircle className="h-4 w-4 inline mr-2" />
-                    Bot server não está rodando. Inicie o servidor em: <code className="bg-background px-1 rounded">whatsapp-bot</code>
+                    Bot server não está rodando. Inicie com: <code className="bg-background px-1 rounded">cd whatsapp-bot && npm run server</code>
                   </div>
                 )}
               </>
@@ -583,7 +764,7 @@ export default function WhatsAppPage() {
                 <p className="text-muted-foreground">
                   Gerando QR Code...
                 </p>
-                {!botServerConnected && (
+                {isDevelopment && !botServerConnected && (
                   <p className="text-sm text-destructive mt-2">
                     Conecte-se ao bot server primeiro
                   </p>
@@ -749,7 +930,7 @@ export default function WhatsAppPage() {
                     <Button onClick={handleConnect} size="lg">
                       Conectar WhatsApp
                     </Button>
-                    {!botServerConnected && (
+                    {isDevelopment && !botServerConnected && (
                       <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-400">
                         <AlertCircle className="h-4 w-4 inline mr-2" />
                         Bot server não está rodando. Inicie com: <code className="bg-background px-1 rounded">cd whatsapp-bot && npm run server</code>

@@ -22,7 +22,33 @@ function jsonResponse(data, status = 200) {
  */
 async function handleGetConversations(request, env) {
   try {
-    // Buscar conversas do banco (tabela de leads ou conversas)
+    // Tentar obter conversas do bot server primeiro
+    const botServerUrl = env.WHATSAPP_BOT_SERVER_URL || 'http://localhost:3001';
+    
+    try {
+      const botResponse = await fetch(`${botServerUrl}/conversations`, {
+        signal: AbortSignal.timeout(5000),
+        headers: {
+          'User-Agent': 'oConnector-Worker/1.0',
+        },
+      });
+      
+      if (botResponse.ok) {
+        const botData = await botResponse.json();
+        if (botData.success && botData.data && botData.data.length > 0) {
+          // Retornar conversas do bot server
+          return jsonResponse({
+            success: true,
+            data: botData.data,
+          });
+        }
+      }
+    } catch (error) {
+      // Bot server não disponível, usar fallback do banco
+      console.log('Bot server não acessível, usando banco de dados:', error.message);
+    }
+    
+    // Fallback: Buscar conversas do banco (tabela de leads ou conversas)
     const conversations = await env.DB.prepare(`
       SELECT DISTINCT 
         telefone as contact,
@@ -30,7 +56,7 @@ async function handleGetConversations(request, env) {
         MAX(created_at) as lastMessageTime,
         COUNT(*) as messageCount
       FROM leads
-      WHERE origem = 'whatsapp'
+      WHERE origem = 'whatsapp' OR origem = 'whatsapp_bot'
       GROUP BY telefone, nome
       ORDER BY lastMessageTime DESC
       LIMIT 50
@@ -73,8 +99,33 @@ async function handleGetMessages(request, env) {
       );
     }
 
-    // Buscar mensagens do banco
-    // Por enquanto, retornar histórico de leads/interações
+    // Tentar obter mensagens do bot server primeiro
+    const botServerUrl = env.WHATSAPP_BOT_SERVER_URL || 'http://localhost:3001';
+    
+    try {
+      const botResponse = await fetch(`${botServerUrl}/messages/${contact}`, {
+        signal: AbortSignal.timeout(5000),
+        headers: {
+          'User-Agent': 'oConnector-Worker/1.0',
+        },
+      });
+      
+      if (botResponse.ok) {
+        const botData = await botResponse.json();
+        if (botData.success && botData.data && botData.data.length > 0) {
+          // Retornar mensagens do bot server
+          return jsonResponse({
+            success: true,
+            data: botData.data,
+          });
+        }
+      }
+    } catch (error) {
+      // Bot server não disponível, usar fallback do banco
+      console.log('Bot server não acessível, usando banco de dados:', error.message);
+    }
+
+    // Fallback: Buscar mensagens do banco
     const leads = await env.DB.prepare(`
       SELECT 
         id,
@@ -83,7 +134,7 @@ async function handleGetMessages(request, env) {
         observacoes,
         created_at
       FROM leads
-      WHERE telefone = ? AND origem = 'whatsapp'
+      WHERE telefone = ? AND (origem = 'whatsapp' OR origem = 'whatsapp_bot')
       ORDER BY created_at DESC
       LIMIT 100
     `).bind(contact).all();
@@ -97,7 +148,7 @@ async function handleGetMessages(request, env) {
           id: `lead_${lead.id}_1`,
           text: lead.observacoes,
           fromMe: false,
-          timestamp: new Date(lead.created_at),
+          timestamp: new Date(lead.created_at).toISOString(),
           contact: contact,
         });
       }
@@ -107,7 +158,7 @@ async function handleGetMessages(request, env) {
         id: `lead_${lead.id}_system`,
         text: `Lead capturado: ${lead.nome || 'Cliente'}`,
         fromMe: true,
-        timestamp: new Date(lead.created_at),
+        timestamp: new Date(lead.created_at).toISOString(),
         contact: contact,
       });
 
@@ -115,7 +166,7 @@ async function handleGetMessages(request, env) {
     });
 
     // Ordenar por timestamp
-    messages.sort((a, b) => a.timestamp - b.timestamp);
+    messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     return jsonResponse({
       success: true,

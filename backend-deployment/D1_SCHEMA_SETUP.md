@@ -128,6 +128,30 @@ PRAGMA table_info(clientes);
 
 ---
 
+---
+
+## 5. Adicionar Coluna `updated_at` na Tabela `leads` (CORREÇÃO 04/11/2025)
+
+⚠️ **Importante:** Esta correção é necessária para evitar erro 500 no endpoint GET /api/leads
+
+```sql
+-- Adicionar coluna updated_at na tabela leads
+ALTER TABLE leads ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
+
+-- Atualizar leads existentes com data de criação como updated_at inicial
+UPDATE leads SET updated_at = created_at WHERE updated_at IS NULL;
+```
+
+**Se der erro "duplicate column name", ignore. A coluna já está criada.**
+
+Verificar se foi adicionada:
+
+```sql
+PRAGMA table_info(leads);
+```
+
+---
+
 ## 🚀 PRÓXIMO PASSO
 
 Após executar o SQL:

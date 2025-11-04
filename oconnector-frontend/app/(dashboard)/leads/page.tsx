@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
 export default function LeadsPage() {
+  const router = useRouter();
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -19,20 +21,48 @@ export default function LeadsPage() {
 
   const loadLeads = async () => {
     try {
+      setLoading(true);
+      
       const clienteResponse = await api.getMyData();
+      
+      if (!clienteResponse.success) {
+        // Se for erro 401, o token foi limpo - não fazer nada, o layout vai redirecionar
+        if (clienteResponse.error === "HTTP 401" || clienteResponse.message?.includes("Token")) {
+          setLoading(false);
+          return;
+        }
+        console.error("Erro ao obter dados do cliente:", clienteResponse.error);
+        setLeads([]);
+        setLoading(false);
+        return;
+      }
+      
       const clienteId = clienteResponse.data?.id;
 
       if (clienteId) {
         const response = await api.getLeads(clienteId);
-        if (response.success && response.data) {
+        if (response.success) {
+          // Se response.data existe e é um array, usar ele
+          // Caso contrário, usar array vazio
           const leadsData = Array.isArray(response.data)
             ? response.data
             : (response.data as any)?.leads || [];
           setLeads(leadsData);
+        } else {
+          // Se não teve sucesso, verificar se é erro de autenticação
+          // O erro 401 já foi tratado no api.request e redireciona automaticamente
+          if (response.error !== "HTTP 401") {
+            console.error("Erro ao buscar leads:", response.error || response.message);
+            setLeads([]);
+          }
         }
+      } else {
+        // Se não tem clienteId, não há leads para mostrar
+        setLeads([]);
       }
     } catch (error) {
       console.error("Erro ao carregar leads:", error);
+      setLeads([]);
     } finally {
       setLoading(false);
     }

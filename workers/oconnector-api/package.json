@@ -1,0 +1,14 @@
+{
+  "name": "oconnector-api",
+  "version": "1.0.0",
+  "description": "oConnector API Worker com integração Google Places",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^4.45.3"
+  }
+}
+

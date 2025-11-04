@@ -21,6 +21,29 @@ export class MessageHandler {
     this.leadManager = new LeadManager(oconnectorAPIUrl);
     this.conversations = new Map(); // Armazena conversas ativas
     this.isProcessing = new Set(); // Controla mensagens sendo processadas
+    this.botWhatsAppNumber = null; // Número do bot conectado
+    this.clienteId = null; // Cliente associado ao bot (cacheado)
+  }
+
+  /**
+   * Configurar número do bot e identificar cliente
+   */
+  async setBotNumber(whatsappNumber) {
+    // Garantir que whatsappNumber é string
+    if (typeof whatsappNumber !== 'string') {
+      whatsappNumber = String(whatsappNumber || '');
+    }
+    
+    this.botWhatsAppNumber = whatsappNumber;
+    // Buscar cliente associado ao número do bot
+    this.clienteId = await this.clienteManager.getClienteId(whatsappNumber);
+    
+    if (this.clienteId) {
+      console.log(`✅ Bot configurado - Cliente ID: ${this.clienteId} (Número: ${whatsappNumber})`);
+    } else {
+      console.warn(`⚠️ Número do bot ${whatsappNumber} não está associado a nenhum cliente`);
+      console.warn(`⚠️ O bot aceitará mensagens, mas não conseguirá responder com IA`);
+    }
   }
 
   /**
@@ -48,12 +71,21 @@ export class MessageHandler {
 
       console.log(`📨 Mensagem de ${contactName}: ${body.substring(0, 50)}`);
 
-      // Obter cliente_id
-      const clienteId = await this.clienteManager.getClienteId(from);
+      // Obter cliente_id do bot (não do número que enviou)
+      // O bot aceita mensagens de qualquer número
+      let clienteId = this.clienteId;
+      
+      // Se não tiver cliente configurado, tentar buscar novamente
+      if (!clienteId && this.botWhatsAppNumber) {
+        clienteId = await this.clienteManager.getClienteId(this.botWhatsAppNumber);
+        this.clienteId = clienteId;
+      }
 
+      // Se ainda não tiver cliente, usar cliente padrão ou retornar erro
       if (!clienteId) {
-        console.warn(`⚠️ Número ${from} não está associado a nenhum cliente`);
-        await this.sendMessage(message.from, config.defaultResponses.notConfigured);
+        console.error(`❌ Bot não está configurado com um cliente válido!`);
+        console.error(`❌ Número do bot: ${this.botWhatsAppNumber || 'não configurado'}`);
+        await this.sendMessage(message.from, 'Desculpe, o atendimento não está configurado no momento. Por favor, entre em contato com o suporte.');
         return;
       }
 
@@ -144,13 +176,18 @@ export class MessageHandler {
     try {
       // Se for WorkerAIAgent
       if (this.aiAgent.constructor.name === 'WorkerAIAgent') {
-        const resposta = await this.aiAgent.getResponse(
-          'Olá! Boa tarde!',
-          {}
-        );
-        
-        if (resposta) {
-          return resposta;
+        try {
+          const resposta = await this.aiAgent.getResponse(
+            'Olá! Boa tarde!',
+            {}
+          );
+          
+          if (resposta) {
+            return resposta;
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro ao obter saudação via Workers AI, usando fallback:', error.message);
+          // Continuar para o fallback
         }
       } else {
         // AIAgent tradicional
@@ -165,9 +202,16 @@ export class MessageHandler {
       }
 
       // Fallback para saudação padrão
-      const cliente = await this.clienteManager.getCliente(clienteId);
-      if (cliente && cliente.nome_imobiliaria) {
-        return `Olá! 👋 Bem-vindo à *${cliente.nome_imobiliaria}*!\n\nComo posso ajudá-lo hoje?`;
+      // Usar o número do bot para buscar dados do cliente
+      if (this.botWhatsAppNumber && typeof this.botWhatsAppNumber === 'string') {
+        try {
+          const cliente = await this.clienteManager.getCliente(this.botWhatsAppNumber);
+          if (cliente && cliente.nome_imobiliaria) {
+            return `Olá! 👋 Bem-vindo à *${cliente.nome_imobiliaria}*!\n\nComo posso ajudá-lo hoje?`;
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro ao buscar dados do cliente para saudação:', error.message);
+        }
       }
 
       return config.defaultResponses.greeting;
@@ -193,8 +237,18 @@ export class MessageHandler {
         };
 
         // Obter resposta do Worker AI
-        const resposta = await this.aiAgent.getResponse(mensagem, contexto);
-        return resposta || 'Desculpe, não consegui processar sua mensagem no momento.';
+        try {
+          const resposta = await this.aiAgent.getResponse(mensagem, contexto);
+          if (resposta) {
+            return resposta;
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro ao obter resposta do Workers AI:', error.message);
+          // Continuar para resposta padrão
+        }
+        
+        // Fallback se Workers AI falhar
+        return 'Olá! Como posso ajudá-lo hoje?';
       }
 
       // Se for AIAgent tradicional (agent-training-worker)

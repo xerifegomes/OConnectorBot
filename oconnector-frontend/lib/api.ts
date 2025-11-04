@@ -19,14 +19,37 @@ class ApiClient {
 
   private getToken(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('token');
+      try {
+        return localStorage.getItem('token');
+      } catch (error) {
+        console.error('Erro ao acessar localStorage:', error);
+        return null;
+      }
     }
     return null;
+  }
+  
+  /**
+   * Limpar token (usado quando detectamos que está inválido)
+   */
+  clearToken(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+  }
+
+  /**
+   * Verificar se o token está válido (apenas verifica se existe)
+   */
+  isTokenValid(): boolean {
+    return this.getToken() !== null;
   }
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    requireAuth: boolean = true
   ): Promise<ApiResponse<T>> {
     const token = this.getToken();
     const url = `${this.baseURL}${endpoint}`;
@@ -36,7 +59,29 @@ class ApiClient {
       ...(options.headers as Record<string, string> || {}),
     };
 
-    if (token) {
+    // Endpoints que não precisam de autenticação
+    const publicEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/cadastro'];
+    const isPublicEndpoint = publicEndpoints.some(ep => endpoint.includes(ep));
+    
+    // Se é endpoint público, não requer autenticação
+    if (isPublicEndpoint) {
+      requireAuth = false;
+    }
+
+    // Adicionar token se necessário e disponível
+    if (requireAuth) {
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else {
+        // Se requer autenticação mas não tem token, retornar erro
+        return {
+          success: false,
+          message: 'Token não disponível',
+          error: 'No token',
+        };
+      }
+    } else if (token) {
+      // Se não requer autenticação mas tem token, enviar mesmo assim (pode ser útil)
       headers['Authorization'] = `Bearer ${token}`;
     }
 
@@ -63,10 +108,37 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        // Se for 401, verificar a causa (apenas se não for endpoint público)
+        if (response.status === 401 && requireAuth) {
+          console.error(`Erro 401 em ${url}:`, data);
+          const token = this.getToken();
+          console.error('Token atual:', token ? 'existe' : 'não existe');
+          if (token) {
+            try {
+              const payload = JSON.parse(atob(token));
+              console.error('Token payload:', {
+                hasId: !!payload.id,
+                hasUserId: !!payload.userId,
+                hasExp: !!payload.exp,
+                exp: payload.exp,
+                now: Date.now(),
+                expired: payload.exp ? payload.exp < Date.now() : 'N/A'
+              });
+            } catch (e) {
+              console.error('Erro ao decodificar token:', e);
+            }
+          }
+          // Limpar token apenas se realmente for erro de autenticação
+          if (data.error === 'Token não fornecido' || data.error === 'Token inválido' || data.error === 'Token expirado' || data.error?.includes('Token')) {
+            this.clearToken();
+          }
+        }
+        
+        console.error(`Erro HTTP ${response.status} em ${url}:`, data);
         return {
           success: false,
-          message: data.message || data.error || 'Erro na requisição',
-          error: data.error,
+          message: data.message || data.error || `Erro na requisição (${response.status})`,
+          error: data.error || `HTTP ${response.status}`,
           data: Array.isArray(data) ? data : (data.data || []), // Garantir array mesmo em erro
         };
       }
@@ -94,6 +166,7 @@ class ApiClient {
         data: finalData,
       };
     } catch (error) {
+      console.error(`Erro ao fazer requisição para ${url}:`, error);
       return {
         success: false,
         message: 'Erro ao conectar com o servidor',
@@ -107,7 +180,7 @@ class ApiClient {
     return this.request<{ token: string; user: any }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, senha: password }), // Backend espera "senha"
-    });
+    }, false); // Login não requer autenticação
   }
 
   async register(data: {
@@ -173,11 +246,53 @@ class ApiClient {
     return this.request<any[]>('/api/prospects');
   }
 
+  async saveProspect(prospect: any) {
+    return this.request<any>('/api/prospects', {
+      method: 'POST',
+      body: JSON.stringify(prospect),
+    });
+  }
+
+  async deleteProspect(prospectId: number | string) {
+    return this.request<any>(`/api/prospects/${prospectId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async sendProspectToBot(prospectId: number | string, message?: string) {
+    return this.request<any>(`/api/prospects/${prospectId}/enviar`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
   async prospectar(nicho: string, cidade: string) {
-    return this.request<any>('/api/prospectar', {
+    const response = await this.request<any>('/api/prospectar', {
       method: 'POST',
       body: JSON.stringify({ nicho, cidade }),
     });
+    
+    // O endpoint /api/prospectar retorna { success: true, resultados: [...], total: ... }
+    // O método request() já transforma isso em { success: true, data: { success: true, resultados: [...], total: ... } }
+    // Precisamos extrair os resultados corretamente
+    if (response.success && response.data) {
+      // Se response.data tem a propriedade resultados, usar ela
+      if (response.data.resultados && Array.isArray(response.data.resultados)) {
+        return {
+          success: true,
+          data: response.data.resultados,
+        };
+      }
+      // Se response.data já é um array (caso especial)
+      if (Array.isArray(response.data)) {
+        return {
+          success: true,
+          data: response.data,
+        };
+      }
+    }
+    
+    return response;
   }
 
   // ==================== WHATSAPP ====================
@@ -221,156 +336,34 @@ class ApiClient {
   }
 
   async getWhatsAppStatus() {
-    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
-    // Só tentar localhost se estiver EXATAMENTE em localhost
-    const isLocalDev = typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-    if (!isLocalDev) {
-      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
-      return this.request<{ status: string; qr?: string }>('/api/whatsapp/status');
-    }
-    
-    // Só tenta localhost se for realmente localhost
-    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
-    
-    try {
-      const response = await fetch(`${botServerUrl}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        mode: 'cors',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          success: true,
-          data: {
-            status: data.status,
-            qr: data.qr,
-            info: data.info,
-            ready: data.ready,
-          },
-        };
-      }
-    } catch (e) {
-      // Silenciosamente fallback para API do Cloudflare
-    }
-    
-    // Fallback para API do Cloudflare
+    // SEMPRE usar API do Cloudflare (mesmo em dev)
+    // Isso evita erros de CORS no console quando bot local não está rodando
     return this.request<{ status: string; qr?: string }>('/api/whatsapp/status');
   }
 
   async getWhatsAppQR() {
-    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
-    // Só tentar localhost se estiver EXATAMENTE em localhost
-    const isLocalDev = typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-    if (!isLocalDev) {
-      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
-      return this.request<{ success: boolean; qr?: string; status: string }>('/api/whatsapp/qr');
-    }
-    
-    // Só tenta localhost se for realmente localhost
-    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
-    
-    try {
-      const response = await fetch(`${botServerUrl}/qr`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        mode: 'cors',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          success: data.success || !!data.qr,
-          data: {
-            qr: data.qr,
-            status: data.status,
-          },
-        };
-      }
-    } catch (e) {
-      // Silenciosamente fallback para API do Cloudflare
-    }
-    
-    // Fallback para API do Cloudflare
+    // SEMPRE usar API do Cloudflare (mesmo em dev)
+    // Isso evita erros de CORS no console quando bot local não está rodando
     return this.request<{ success: boolean; qr?: string; status: string }>('/api/whatsapp/qr');
   }
 
   async getWhatsAppBotStatus() {
-    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
-    // Só tentar localhost se estiver EXATAMENTE em localhost
-    const isLocalDev = typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-    if (!isLocalDev) {
-      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
-      return this.request<{ status: string; ready: boolean; info: any }>('/api/whatsapp/bot-status');
-    }
-    
-    // Só tenta localhost se for realmente localhost
-    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
-    
-    try {
-      const response = await fetch(`${botServerUrl}/info`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        mode: 'cors',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          success: true,
-          data: {
-            status: data.status,
-            ready: data.ready || false,
-            info: data.info,
-          },
-        };
-      }
-    } catch (e) {
-      // Silenciosamente fallback para API do Cloudflare
-    }
-    
-    // Fallback para API do Cloudflare
+    // SEMPRE usar API do Cloudflare (mesmo em dev)
+    // Isso evita erros de CORS no console quando bot local não está rodando
     return this.request<{ status: string; ready: boolean; info: any }>('/api/whatsapp/bot-status');
   }
 
+  async syncWhatsAppConversations() {
+    // SEMPRE usar API do Cloudflare (mesmo em dev)
+    // Isso evita erros de CORS no console quando bot local não está rodando
+    return this.request<any>('/api/whatsapp/sync', {
+      method: 'POST',
+    });
+  }
+
   async restartWhatsAppBot() {
-    // PRODUÇÃO: Sempre usar API do Cloudflare em produção
-    // Só tentar localhost se estiver EXATAMENTE em localhost
-    const isLocalDev = typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-    if (!isLocalDev) {
-      // Qualquer ambiente que não seja localhost = usar apenas Cloudflare API
-      return this.request<any>('/api/whatsapp/bot/restart', {
-        method: 'POST',
-      });
-    }
-    
-    // Só tenta localhost se for realmente localhost
-    const botServerUrl = process.env.NEXT_PUBLIC_BOT_SERVER_URL || 'http://localhost:3001';
-    
-    try {
-      const response = await fetch(`${botServerUrl}/restart`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        mode: 'cors',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          success: data.success || true,
-          data: data,
-        };
-      }
-    } catch (e) {
-      // Silenciosamente fallback para API do Cloudflare
-    }
-    
-    // Fallback para API do Cloudflare
+    // SEMPRE usar API do Cloudflare (mesmo em dev)
+    // Isso evita erros de CORS no console quando bot local não está rodando
     return this.request<any>('/api/whatsapp/bot/restart', {
       method: 'POST',
     });

@@ -144,7 +144,7 @@ function RegisterForm() {
           <div className="space-y-2">
             <Label htmlFor="nicho">Nicho de Atuação</Label>
             <Select
-              value={formData.nicho}
+              value={formData.nicho || undefined}
               onValueChange={(value) =>
                 setFormData({ ...formData, nicho: value })
               }
@@ -157,6 +157,8 @@ function RegisterForm() {
                 <SelectItem value="Imobiliária">Imobiliária</SelectItem>
                 <SelectItem value="Clínica/Consultório">Clínica/Consultório</SelectItem>
                 <SelectItem value="Salão de Beleza/Estética">Salão de Beleza/Estética</SelectItem>
+                <SelectItem value="Estética">Estética</SelectItem>
+                <SelectItem value="Design de Sobrancelhas">Design de Sobrancelhas</SelectItem>
                 <SelectItem value="Restaurante">Restaurante</SelectItem>
                 <SelectItem value="Academia">Academia</SelectItem>
                 <SelectItem value="Outro">Outro</SelectItem>

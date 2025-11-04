@@ -15,6 +15,14 @@ binding = "DB"
 database_name = "oconnector_db"
 database_id = "33ba528b-382b-46da-bc26-8bb4fbc8d994"
 
+# Workers KV para rate limiting do Google Places API
+# OPCIONAL: Descomente e configure se quiser usar rate limiting via KV
+# Para criar: wrangler kv:namespace create "RATE_LIMIT"
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT"
+# id = "SUBSTITUIR_PELO_ID_REAL"
+# preview_id = "SUBSTITUIR_PELO_PREVIEW_ID_REAL"
+
 # Workers AI (automatic binding)
 # Não precisa configurar aqui, é automático
 
@@ -25,5 +33,5 @@ database_id = "33ba528b-382b-46da-bc26-8bb4fbc8d994"
 # GOOGLE_OAUTH_CLIENT_ID = "..."
 # GOOGLE_OAUTH_CLIENT_SECRET = "..."
 # GOOGLE_SHEETS_ID = "..."
-WHATSAPP_BOT_SERVER_URL = "https://6635dafb02a9.ngrok-free.app"
+# WHATSAPP_BOT_SERVER_URL = ""  # Configurar quando bot estiver em servidor público
 
