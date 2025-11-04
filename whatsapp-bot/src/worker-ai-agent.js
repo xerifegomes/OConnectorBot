@@ -55,6 +55,7 @@ e oferecer soluções tecnológicas personalizadas.`
 
   /**
    * Resposta via API (chama worker que tem acesso ao Workers AI)
+   * VERSÃO MELHORADA: Envia whatsapp_number e contexto completo
    */
   async getResponseViaAPI(mensagem, contexto) {
     const prompt = this.buildPrompt(mensagem, contexto);
@@ -68,6 +69,8 @@ e oferecer soluções tecnológicas personalizadas.`
         message: mensagem,
         context: contexto,
         prompt: prompt,
+        cliente_id: contexto.cliente_id || null,
+        whatsapp_number: contexto.whatsapp_number || null,
       }),
       signal: AbortSignal.timeout(15000), // 15 segundos timeout
     });

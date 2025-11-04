@@ -15,6 +15,9 @@ binding = "DB"
 database_name = "oconnector_db"
 database_id = "33ba528b-382b-46da-bc26-8bb4fbc8d994"
 
+[ai]
+binding = "AI"
+
 # Workers KV para rate limiting do Google Places API
 # OPCIONAL: Descomente e configure se quiser usar rate limiting via KV
 # Para criar: wrangler kv:namespace create "RATE_LIMIT"
@@ -23,8 +26,9 @@ database_id = "33ba528b-382b-46da-bc26-8bb4fbc8d994"
 # id = "SUBSTITUIR_PELO_ID_REAL"
 # preview_id = "SUBSTITUIR_PELO_PREVIEW_ID_REAL"
 
-# Workers AI (automatic binding)
-# Não precisa configurar aqui, é automático
+# Workers AI binding
+# Formato correto para Workers AI
+# Binding = AI é automático no worker, mas precisa declarar explicitamente
 
 # Variáveis de ambiente (configure no dashboard ou aqui)
 [vars]

@@ -264,12 +264,13 @@ async function handleVerify(request, env) {
 
 /**
  * POST /api/ai/chat
- * Handler de IA usando Workers AI
+ * Handler de IA usando Workers AI - VERSÃO MELHORADA
+ * Suporta: busca de conhecimento do cliente, histórico, logs
  */
 async function handleAIChat(request, env) {
   try {
     const body = await request.json();
-    const { message, context, prompt } = body;
+    const { message, context, prompt, cliente_id, whatsapp_number } = body;
 
     if (!message && !prompt) {
       return jsonResponse(
@@ -278,40 +279,154 @@ async function handleAIChat(request, env) {
       );
     }
 
-    const finalPrompt = prompt || `
-Você é o oConnector, especialista em tecnologia e soluções para empresas.
-Você é profissional, consultivo e humanizado.
-Seu objetivo é identificar necessidades e oferecer soluções tecnológicas.
+    // 1. Buscar conhecimento do cliente (se cliente_id ou whatsapp_number fornecido)
+    let clienteContext = '';
+    let clienteId = cliente_id;
 
-${context ? `Contexto: ${JSON.stringify(context)}` : ''}
+    // Se não tem cliente_id mas tem whatsapp_number, buscar cliente
+    if (!clienteId && whatsapp_number) {
+      try {
+        const cliente = await env.DB.prepare(
+          'SELECT id, nome_imobiliaria, cidade, estado, sobre FROM clientes WHERE whatsapp_numero = ? AND ativo = 1'
+        )
+          .bind(whatsapp_number)
+          .first();
 
-Mensagem: ${message}
+        if (cliente) {
+          clienteId = cliente.id;
+          clienteContext = `\nEmpresa: ${cliente.nome_imobiliaria}`;
+          if (cliente.cidade) clienteContext += `\nLocalização: ${cliente.cidade}, ${cliente.estado || ''}`;
+          if (cliente.sobre) clienteContext += `\nSobre: ${cliente.sobre}`;
+        }
+      } catch (error) {
+        console.error('Erro ao buscar cliente:', error);
+      }
+    }
 
-Responda de forma natural, consultiva e humanizada. Identifique necessidades e ofereça soluções tecnológicas.
-    `.trim();
+    // Se tem cliente_id, buscar informações completas
+    if (clienteId && !clienteContext) {
+      try {
+        const cliente = await env.DB.prepare(
+          'SELECT nome_imobiliaria, cidade, estado, sobre, site, especialidade FROM clientes WHERE id = ? AND ativo = 1'
+        )
+          .bind(clienteId)
+          .first();
 
-    // Chamar Workers AI
+        if (cliente) {
+          clienteContext = `\nEmpresa: ${cliente.nome_imobiliaria}`;
+          if (cliente.cidade) clienteContext += `\nLocalização: ${cliente.cidade}, ${cliente.estado || ''}`;
+          if (cliente.sobre) clienteContext += `\nSobre: ${cliente.sobre}`;
+          if (cliente.site) clienteContext += `\nSite: ${cliente.site}`;
+          if (cliente.especialidade) clienteContext += `\nEspecialidade: ${cliente.especialidade}`;
+        }
+      } catch (error) {
+        console.error('Erro ao buscar dados do cliente:', error);
+      }
+    }
+
+    // 2. Buscar conhecimento treinado (documentos do cliente)
+    let conhecimentoTreinado = '';
+    if (clienteId) {
+      try {
+        const docs = await env.DB.prepare(
+          `SELECT conteudo, tipo, titulo 
+           FROM documentos_treinamento 
+           WHERE cliente_id = ? 
+           ORDER BY created_at DESC 
+           LIMIT 3`
+        )
+          .bind(clienteId)
+          .all();
+
+        if (docs.results && docs.results.length > 0) {
+          conhecimentoTreinado = '\n\nConhecimento da empresa:\n';
+          docs.results.forEach((doc, idx) => {
+            conhecimentoTreinado += `${idx + 1}. ${doc.titulo || doc.tipo}: ${doc.conteudo.substring(0, 200)}...\n`;
+          });
+        }
+      } catch (error) {
+        console.error('Erro ao buscar conhecimento treinado:', error);
+      }
+    }
+
+    // 3. Construir histórico da conversa
+    let historicoTexto = '';
+    if (context?.historico && Array.isArray(context.historico) && context.historico.length > 0) {
+      historicoTexto = '\n\nHistórico recente da conversa:\n';
+      context.historico.slice(-5).forEach((msg) => {
+        const remetente = msg.remetente === 'cliente' ? 'Cliente' : 'Você (Assistente)';
+        historicoTexto += `${remetente}: ${msg.texto}\n`;
+      });
+    }
+
+    // 4. Construir prompt final
+    const nomeEmpresa = clienteContext ? clienteContext.split('\n')[1]?.replace('Empresa: ', '') : 'oConnector';
+    const systemPrompt = `Você é um assistente IA da ${nomeEmpresa}, especialista em atendimento ao cliente.
+
+Você é profissional, consultivo, humanizado e sempre responde em português do Brasil.
+
+${clienteContext}${conhecimentoTreinado}
+
+IMPORTANTE:
+- Use as informações da empresa e conhecimento treinado para dar respostas precisas e personalizadas
+- Seja natural e conversacional
+- Responda de forma concisa (máximo 250 caracteres se possível)
+- Se não souber algo, seja honesto e ofereça encaminhar para um atendente humano
+- Identifique necessidades do cliente e ofereça soluções`;
+
+    const userPrompt = prompt || `${historicoTexto}
+
+Mensagem do cliente: ${message}
+
+Responda de forma natural e humanizada:`;
+
+    // 5. Chamar Workers AI
     const response = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
       messages: [
         {
           role: 'system',
-          content: `Você é o oConnector, especialista em tecnologia e soluções para empresas. 
-Você é profissional, consultivo e humanizado. Seu objetivo é identificar necessidades 
-e oferecer soluções tecnológicas personalizadas.`
+          content: systemPrompt
         },
         {
           role: 'user',
-          content: finalPrompt
+          content: userPrompt
         }
       ],
-      max_tokens: 500,
-      temperature: 0.7,
+      max_tokens: 400,
+      temperature: 0.8,
     });
+
+    const aiResponse = response.response || response;
+
+    // 6. Registrar uso da IA (log para métricas) - Silencioso se falhar
+    if (clienteId) {
+      try {
+        await env.DB.prepare(
+          `INSERT INTO ai_usage_logs (cliente_id, mensagem, resposta, modelo, tokens_estimados, created_at)
+           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+        )
+          .bind(
+            clienteId,
+            message.substring(0, 500),
+            aiResponse.substring(0, 500),
+            'llama-3-8b-instruct',
+            Math.ceil((message.length + aiResponse.length) / 4)
+          )
+          .run();
+      } catch (error) {
+        console.error('Erro ao registrar uso da IA (não crítico):', error);
+      }
+    }
 
     return jsonResponse({
       success: true,
-      response: response.response || response,
-      message: response.response || response,
+      response: aiResponse,
+      message: aiResponse,
+      metadata: {
+        cliente_id: clienteId || null,
+        tem_conhecimento: conhecimentoTreinado.length > 0,
+        tem_contexto: clienteContext.length > 0,
+      }
     });
   } catch (error) {
     console.error('Erro no Workers AI:', error);

@@ -223,13 +223,16 @@ export class MessageHandler {
 
   /**
    * Obter resposta do agente IA
+   * VERSÃO MELHORADA: Passa cliente_id e whatsapp_number
    */
   async getAIResponse(clienteId, mensagem, historico = []) {
     try {
       // Se for WorkerAIAgent (usando Workers AI diretamente)
       if (this.aiAgent.constructor.name === 'WorkerAIAgent') {
-        // Construir contexto com histórico
+        // Construir contexto com histórico e identificação
         const contexto = {
+          cliente_id: clienteId,
+          whatsapp_number: this.botWhatsAppNumber,
           historico: historico.map(msg => ({
             remetente: msg.tipo === 'recebida' ? 'cliente' : 'agente',
             texto: msg.mensagem || msg.body,
